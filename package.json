@@ -1,0 +1,14 @@
+{
+  "name": "radio-mia-root",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Radio Mía — App Android (Kotlin/Compose) + Backend seguro Node.js/TypeScript con Groq",
+  "main": "index.js",
+  "scripts": {
+    "postinstall": "npm install --prefix backend",
+    "build": "npm install --prefix backend && npm run build --prefix backend",
+    "start": "npm run start --prefix backend",
+    "dev": "npm run dev --prefix backend",
+    "test": "npm run test --prefix backend"
+  }
+}
