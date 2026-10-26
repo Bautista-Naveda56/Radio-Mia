@@ -1,0 +1,19 @@
+{
+  "name": "radio-mia-backend",
+  "version": "1.0.0",
+  "description": "Backend seguro de Radio Mía para generación de guion y voz del locutor con Groq",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc && node dist/index.js",
+    "test": "tsc && node --test dist/__tests__/backend.test.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  }
+}

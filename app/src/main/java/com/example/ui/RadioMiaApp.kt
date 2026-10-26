@@ -52,7 +52,6 @@ import com.example.ui.components.NowPlayingSection
 import com.example.ui.components.SongLibrarySection
 import com.example.ui.theme.AmberPrimary
 import com.example.ui.theme.AmberPrimaryContainer
-import com.example.ui.theme.DividerSubtle
 import com.example.ui.theme.OnAirCoral
 import com.example.ui.theme.OnAirCoralContainer
 import com.example.ui.theme.StudioBackground
@@ -88,7 +87,6 @@ fun RadioMiaApp(
         }
     }
 
-    // BackHandler para volver de la lista de canciones a la pantalla principal de reproducción
     BackHandler(enabled = uiState.activeSection == RadioSection.LIBRARY) {
         radioViewModel.selectSection(RadioSection.PLAYER)
     }
@@ -101,6 +99,7 @@ fun RadioMiaApp(
             RadioStudioHeader(
                 isInterventionActive = engineState.isInterventionActive,
                 isPlaying = engineState.isPlaying,
+                visibleUserStatus = engineState.visibleUserStatus,
                 localSongsCount = uiState.localSongsCount,
                 demoSongsCount = uiState.demoSongsCount,
                 onQuickTestAnnouncer = { radioViewModel.triggerDjIntervention() }
@@ -158,11 +157,12 @@ fun RadioMiaApp(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Panel de depuración siempre visible y plegable
             CollapsibleDebugPanel(
                 engineState = engineState,
                 isExpanded = uiState.isDebugPanelExpanded,
                 onToggleExpand = { radioViewModel.toggleDebugPanelExpanded() },
+                onUpdateBackendUrl = { radioViewModel.updateBackendUrl(it) },
+                onRefreshBackendStatus = { radioViewModel.checkBackendConnection() },
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
             )
 
@@ -174,7 +174,6 @@ fun RadioMiaApp(
                 val isWideScreen = maxWidth >= 720.dp
 
                 if (isWideScreen) {
-                    // Diseño adaptativo de doble panel para tablets / pantallas apaisadas
                     Row(
                         modifier = Modifier.fillMaxSize(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -189,6 +188,11 @@ fun RadioMiaApp(
                             onDuckingVolumeChange = { radioViewModel.updateDuckingVolume(it) },
                             onFadeDurationChange = { radioViewModel.updateFadeDuration(it) },
                             onTriggerAnnouncer = { radioViewModel.triggerDjIntervention() },
+                            onTestAnnouncer = { radioViewModel.triggerFallbackTestAnnouncer() },
+                            onDjEnabledChange = { radioViewModel.setDjEnabled(it) },
+                            onSelectRadioStyle = { radioViewModel.selectRadioStyle(it) },
+                            onSelectInterventionType = { radioViewModel.selectInterventionType(it) },
+                            onChangeAutoFrequency = { radioViewModel.setAutoInterventionFrequency(it) },
                             modifier = Modifier
                                 .weight(0.55f)
                                 .fillMaxHeight()
@@ -226,6 +230,11 @@ fun RadioMiaApp(
                                 onDuckingVolumeChange = { radioViewModel.updateDuckingVolume(it) },
                                 onFadeDurationChange = { radioViewModel.updateFadeDuration(it) },
                                 onTriggerAnnouncer = { radioViewModel.triggerDjIntervention() },
+                                onTestAnnouncer = { radioViewModel.triggerFallbackTestAnnouncer() },
+                                onDjEnabledChange = { radioViewModel.setDjEnabled(it) },
+                                onSelectRadioStyle = { radioViewModel.selectRadioStyle(it) },
+                                onSelectInterventionType = { radioViewModel.selectInterventionType(it) },
+                                onChangeAutoFrequency = { radioViewModel.setAutoInterventionFrequency(it) },
                                 modifier = Modifier.fillMaxSize()
                             )
                         }
@@ -259,6 +268,7 @@ fun RadioMiaApp(
 private fun RadioStudioHeader(
     isInterventionActive: Boolean,
     isPlaying: Boolean,
+    visibleUserStatus: String,
     localSongsCount: Int,
     demoSongsCount: Int,
     onQuickTestAnnouncer: () -> Unit
@@ -326,7 +336,7 @@ private fun RadioStudioHeader(
 
                 Column(modifier = Modifier.weight(1f, fill = false)) {
                     Text(
-                        text = if (isInterventionActive) "Locutor hablando" else "Cabina Lista",
+                        text = visibleUserStatus,
                         style = MaterialTheme.typography.labelSmall,
                         color = if (isInterventionActive) OnAirCoral else AmberPrimary,
                         fontWeight = FontWeight.Bold
@@ -339,7 +349,6 @@ private fun RadioStudioHeader(
                 }
             }
 
-            // Botón rápido "Probar locutor" en cabecera para acceso desde cualquier pestaña
             Surface(
                 onClick = onQuickTestAnnouncer,
                 shape = RoundedCornerShape(10.dp),

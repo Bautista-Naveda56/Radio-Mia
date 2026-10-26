@@ -24,13 +24,21 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +52,7 @@ import com.example.ui.theme.AmberPrimary
 import com.example.ui.theme.DividerSubtle
 import com.example.ui.theme.JetBrainsMonoFontFamily
 import com.example.ui.theme.OnAirCoral
+import com.example.ui.theme.StudioSurface
 import com.example.ui.theme.StudioSurfaceElevated
 import com.example.ui.theme.TelemetryCyan
 import com.example.ui.theme.TextSecondary
@@ -55,8 +64,12 @@ fun CollapsibleDebugPanel(
     engineState: RadioEngineState,
     isExpanded: Boolean,
     onToggleExpand: () -> Unit,
+    onUpdateBackendUrl: (String) -> Unit = {},
+    onRefreshBackendStatus: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    var backendUrlDraft by remember(engineState.backendUrl) { mutableStateOf(engineState.backendUrl) }
+
     val shape = RoundedCornerShape(16.dp)
     val borderColor = if (engineState.isInterventionActive) {
         OnAirCoral.copy(alpha = 0.7f)
@@ -115,7 +128,7 @@ fun CollapsibleDebugPanel(
                             color = TelemetryCyan
                         )
                         Text(
-                            text = "Vol. actual: ${(engineState.currentRealtimeMusicVolume * 100).toInt()}% • ${engineState.interventionPhase.spanishLabel}",
+                            text = "Estado: ${engineState.visibleUserStatus} • Vol: ${(engineState.currentRealtimeMusicVolume * 100).toInt()}%",
                             style = MaterialTheme.typography.labelSmall,
                             color = TextSecondary,
                             maxLines = 1,
@@ -196,6 +209,55 @@ fun CollapsibleDebugPanel(
                         ),
                         testTag = "debug_announcer_duration"
                     )
+
+                    DebugMetricRow(
+                        label = "Groq / TTS / Caché:",
+                        value = "Modelo: ${engineState.lastTextModelUsed} • Caché: ${if (engineState.lastCacheHit) "HIT" else "MISS"} • ${engineState.lastTtsStatus}",
+                        testTag = "debug_groq_status"
+                    )
+
+                    DebugMetricRow(
+                        label = "Detalle técnico backend:",
+                        value = engineState.lastTechnicalDetail,
+                        testTag = "debug_backend_detail"
+                    )
+
+                    // Configuración de URL del backend para emulador (10.0.2.2) o dispositivo físico en LAN
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = backendUrlDraft,
+                            onValueChange = {
+                                backendUrlDraft = it
+                                onUpdateBackendUrl(it)
+                            },
+                            label = { Text("URL Backend Radio Mía", style = MaterialTheme.typography.labelSmall) },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = TelemetryCyan,
+                                unfocusedBorderColor = DividerSubtle,
+                                focusedContainerColor = StudioSurface,
+                                unfocusedContainerColor = StudioSurface
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("debug_backend_url_input")
+                        )
+                        IconButton(
+                            onClick = onRefreshBackendStatus,
+                            modifier = Modifier.testTag("debug_refresh_backend_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Sync,
+                                contentDescription = "Verificar conexión con el backend",
+                                tint = TelemetryCyan
+                            )
+                        }
+                    }
 
                     // Barra visual del volumen en vivo para verificar el ducking y fade
                     Column(

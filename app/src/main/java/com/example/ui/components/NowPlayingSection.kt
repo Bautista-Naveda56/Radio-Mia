@@ -10,6 +10,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +41,8 @@ import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
@@ -49,6 +52,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -61,6 +66,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -68,7 +74,9 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.R
 import com.example.model.DjInterventionPhase
+import com.example.model.InterventionType
 import com.example.model.RadioEngineState
+import com.example.model.RadioStyle
 import com.example.ui.theme.AmberPrimary
 import com.example.ui.theme.DividerSubtle
 import com.example.ui.theme.JetBrainsMonoFontFamily
@@ -80,6 +88,7 @@ import com.example.ui.theme.TelemetryCyan
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import com.example.ui.theme.VuGreen
 import java.util.Locale
 
 @Composable
@@ -93,6 +102,11 @@ fun NowPlayingSection(
     onDuckingVolumeChange: (Float) -> Unit,
     onFadeDurationChange: (Float) -> Unit,
     onTriggerAnnouncer: () -> Unit,
+    onTestAnnouncer: () -> Unit,
+    onDjEnabledChange: (Boolean) -> Unit,
+    onSelectRadioStyle: (RadioStyle) -> Unit,
+    onSelectInterventionType: (InterventionType) -> Unit,
+    onChangeAutoFrequency: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val currentSong = engineState.currentSong
@@ -124,7 +138,7 @@ fun NowPlayingSection(
         // Portada de la canción actual con aro luminoso reactivo al estado de locución
         Box(
             modifier = Modifier
-                .size(210.dp)
+                .size(200.dp)
                 .clip(RoundedCornerShape(28.dp))
                 .background(
                     Brush.radialGradient(
@@ -166,38 +180,36 @@ fun NowPlayingSection(
                 }
             }
 
-            // Etiqueta flotante cuando el locutor está hablando sobre la canción
-            if (engineState.isInterventionActive) {
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = OnAirCoral.copy(alpha = 0.92f),
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 6.dp)
+            // Etiqueta flotante con el estado visible claro (Sección 10)
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = if (engineState.isInterventionActive) {
+                    OnAirCoral.copy(alpha = 0.94f)
+                } else {
+                    StudioSurfaceElevated.copy(alpha = 0.92f)
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 4.dp)
+                    .testTag("visible_user_status_badge")
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.RecordVoiceOver,
-                            contentDescription = null,
-                            tint = TextPrimary,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            text = when (engineState.interventionPhase) {
-                                DjInterventionPhase.FADING_DOWN -> "BAJANDO MÚSICA…"
-                                DjInterventionPhase.SPEAKING -> "LOCUTOR AL AIRE"
-                                DjInterventionPhase.FADING_UP -> "SUBIENDO MÚSICA…"
-                                DjInterventionPhase.IDLE -> ""
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextPrimary,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Filled.RecordVoiceOver,
+                        contentDescription = null,
+                        tint = if (engineState.isInterventionActive) TextPrimary else AmberPrimary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = engineState.visibleUserStatus,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
@@ -228,7 +240,7 @@ fun NowPlayingSection(
             )
             if (currentSong != null) {
                 Text(
-                    text = currentSong.album,
+                    text = "${currentSong.album} • ${engineState.selectedRadioStyle.displayName}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary,
                     textAlign = TextAlign.Center,
@@ -238,7 +250,7 @@ fun NowPlayingSection(
             }
         }
 
-        // Barra de progreso de la canción + Tiempos
+        // Barra de progreso de la canción + Controles de transporte
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(18.dp),
@@ -295,7 +307,6 @@ fun NowPlayingSection(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Controles de transporte: Canción anterior, Reproducir/Pausar, Canción siguiente
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Center,
@@ -422,7 +433,7 @@ fun NowPlayingSection(
             }
         }
 
-        // Cabina del Locutor: Botón "Intervención del DJ", Botón "Probar locutor" y Sliders de Ducking/Fade
+        // Cabina del Locutor Virtual (Groq + Respaldo local demo_locutor.wav)
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -444,12 +455,16 @@ fun NowPlayingSection(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // Encabezado de cabina + Interruptor para activar o desactivar el DJ
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.Mic,
                             contentDescription = null,
@@ -464,23 +479,178 @@ fun NowPlayingSection(
                                 color = OnAirCoral
                             )
                             Text(
-                                text = "Archivo local: demo_locutor.wav",
-                                style = MaterialTheme.typography.bodyMedium,
+                                text = "Estado: ${engineState.visibleUserStatus} • Audio: ${engineState.announcerAudioLabel}",
+                                style = MaterialTheme.typography.bodySmall,
                                 color = TextSecondary
                             )
                         }
                     }
 
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (engineState.isInterventionActive) OnAirCoral else StudioSurfaceElevated
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
-                            text = if (engineState.isInterventionActive) "ACTIVO" else "LISTO",
+                            text = if (engineState.djEnabled) "DJ Activo" else "DJ Off",
                             style = MaterialTheme.typography.labelSmall,
-                            color = TextPrimary,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            color = if (engineState.djEnabled) VuGreen else TextMuted,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Switch(
+                            checked = engineState.djEnabled,
+                            onCheckedChange = onDjEnabledChange,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = StudioSurface,
+                                checkedTrackColor = AmberPrimary,
+                                uncheckedThumbColor = TextSecondary,
+                                uncheckedTrackColor = StudioSurfaceElevated
+                            ),
+                            modifier = Modifier.testTag("switch_dj_enabled")
+                        )
+                    }
+                }
+
+                // Selector de estilo de radio (Sección 9: 5 estilos requeridos)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "Estilo de programación FM:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSecondary
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        RadioStyle.entries.forEach { style ->
+                            val selected = engineState.selectedRadioStyle == style
+                            FilterChip(
+                                selected = selected,
+                                onClick = { onSelectRadioStyle(style) },
+                                label = {
+                                    Text(
+                                        text = style.displayName,
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = AmberPrimary,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                                    containerColor = StudioSurfaceElevated,
+                                    labelColor = TextSecondary
+                                ),
+                                modifier = Modifier.testTag("chip_style_${style.name.lowercase()}")
+                            )
+                        }
+                    }
+                }
+
+                // Selector de tipo de intervención + Frecuencia automática
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Tipo de intervención:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSecondary
+                        )
+                        Text(
+                            text = "Auto cada ${engineState.autoInterventionEverySongs} tema(s)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TelemetryCyan
+                        )
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(
+                            InterventionType.PRESENTACION,
+                            InterventionType.CONTINUIDAD,
+                            InterventionType.CAMBIO_CLIMA,
+                            InterventionType.DATO_CURIOSO
+                        ).forEach { type ->
+                            val selected = engineState.selectedInterventionType == type
+                            FilterChip(
+                                selected = selected,
+                                onClick = { onSelectInterventionType(type) },
+                                label = {
+                                    Text(
+                                        text = type.displayName,
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = OnAirCoral,
+                                    selectedLabelColor = TextPrimary,
+                                    containerColor = StudioSurfaceElevated,
+                                    labelColor = TextSecondary
+                                ),
+                                modifier = Modifier.testTag("chip_intervention_${type.apiValue}")
+                            )
+                        }
+
+                        // Botones de frecuencia 1, 2 o 3 canciones
+                        listOf(1, 2, 3).forEach { count ->
+                            FilterChip(
+                                selected = engineState.autoInterventionEverySongs == count,
+                                onClick = { onChangeAutoFrequency(count) },
+                                label = {
+                                    Text(
+                                        text = "Cada $count",
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = TelemetryCyan.copy(alpha = 0.25f),
+                                    selectedLabelColor = TelemetryCyan,
+                                    containerColor = StudioSurfaceElevated,
+                                    labelColor = TextMuted
+                                )
+                            )
+                        }
+                    }
+                }
+
+                // Tarjeta con el último guion generado por Groq en español rioplatense
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("dj_script_card"),
+                    shape = RoundedCornerShape(12.dp),
+                    color = StudioSurfaceElevated
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "GUION DEL LOCUTOR (${engineState.lastTextModelUsed})",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = AmberPrimary,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = if (engineState.lastCacheHit) "CACHÉ" else "EN VIVO",
+                                style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily),
+                                color = TelemetryCyan
+                            )
+                        }
+                        Text(
+                            text = "“${engineState.lastGeneratedScript}”",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontStyle = FontStyle.Italic,
+                            color = TextPrimary
                         )
                     }
                 }
@@ -517,7 +687,7 @@ fun NowPlayingSection(
                     }
 
                     OutlinedButton(
-                        onClick = onTriggerAnnouncer,
+                        onClick = onTestAnnouncer,
                         modifier = Modifier
                             .weight(1f)
                             .height(52.dp)
@@ -545,7 +715,7 @@ fun NowPlayingSection(
                     }
                 }
 
-                // Barra de progreso de demo_locutor.wav cuando está hablando
+                // Barra de progreso de voz cuando hay intervención activa
                 if (engineState.isInterventionActive) {
                     val voiceDur = engineState.announcerDurationMs.coerceAtLeast(1L)
                     val voicePos = engineState.announcerPositionMs.coerceIn(0L, voiceDur)

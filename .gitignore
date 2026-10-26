@@ -15,4 +15,10 @@
 .cxx
 local.properties
 .env
+.env.*
+!.env.example
+backend/.env
+backend/node_modules/
+backend/dist/
+public/assets/aistudio/.env*
 debug.keystore

@@ -8,7 +8,9 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.LocalAudioRepository
+import com.example.model.InterventionType
 import com.example.model.RadioEngineState
+import com.example.model.RadioStyle
 import com.example.model.SongItem
 import com.example.service.RadioAudioEngine
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,7 +33,7 @@ data class RadioScreenUiState(
     val searchQuery: String = "",
     val filteredSongs: List<SongItem> = emptyList(),
     val activeSection: RadioSection = RadioSection.PLAYER,
-    val isDebugPanelExpanded: Boolean = true,
+    val isDebugPanelExpanded: Boolean = false,
     val isLoadingLibrary: Boolean = false
 )
 
@@ -134,7 +136,6 @@ class RadioViewModel(application: Application) : AndroidViewModel(application) {
             _localSongsCount.value = localSongs.size
             _demoSongsCount.value = demoSongs.size
 
-            // Primero mostramos las canciones reales del dispositivo (MediaStore) y luego las pistas de respaldo
             val combined = localSongs + demoSongs
             audioEngine.setPlaylist(combined, autoSelectFirst = true)
             _isLoadingLibrary.value = false
@@ -175,7 +176,35 @@ class RadioViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun triggerDjIntervention() {
-        audioEngine.triggerOrToggleAnnouncer()
+        audioEngine.triggerOrToggleAnnouncer(useGroqBackend = true)
+    }
+
+    fun triggerFallbackTestAnnouncer() {
+        audioEngine.triggerOrToggleAnnouncer(useGroqBackend = true)
+    }
+
+    fun setDjEnabled(enabled: Boolean) {
+        audioEngine.setDjEnabled(enabled)
+    }
+
+    fun selectRadioStyle(style: RadioStyle) {
+        audioEngine.setRadioStyle(style)
+    }
+
+    fun selectInterventionType(type: InterventionType) {
+        audioEngine.setInterventionType(type)
+    }
+
+    fun setAutoInterventionFrequency(everySongs: Int) {
+        audioEngine.setAutoInterventionFrequency(everySongs)
+    }
+
+    fun updateBackendUrl(url: String) {
+        audioEngine.setBackendUrl(url)
+    }
+
+    fun checkBackendConnection() {
+        audioEngine.refreshBackendStatus()
     }
 
     fun setSearchQuery(query: String) {
