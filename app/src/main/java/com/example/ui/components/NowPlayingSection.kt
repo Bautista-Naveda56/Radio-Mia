@@ -796,7 +796,7 @@ fun NowPlayingSection(
                     Slider(
                         value = engineState.announcerVoiceVolume,
                         onValueChange = onAnnouncerVoiceVolumeChange,
-                        valueRange = 0.10f..1.0f,
+                        valueRange = 0.05f..1.0f,
                         colors = SliderDefaults.colors(
                             thumbColor = OnAirCoral,
                             activeTrackColor = OnAirCoral,

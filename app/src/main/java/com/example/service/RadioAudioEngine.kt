@@ -198,20 +198,21 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
     }
 
     /**
-     * Inicializa el sintetizador en español configurando explícitamente una voz masculina
-     * y un registro grave de locutor de radio FM (pitch = 0.80f).
+     * Inicializa el motor de voz priorizando el motor neural de Google ("com.google.android.tts")
+     * y seleccionando voces masculinas neurales de alta definición (WaveNet / Neural2 en red o VERY_HIGH quality)
+     * sin distorsión de pitch para evitar cualquier efecto robótico.
      */
     private fun initSpanishMaleTtsEngine() {
         runCatching {
-            androidTts = TextToSpeech(appContext) { status ->
+            val initListener = TextToSpeech.OnInitListener { status ->
                 if (status == TextToSpeech.SUCCESS) {
                     val tts = androidTts
                     if (tts != null) {
                         val locales = listOf(
                             Locale("es", "AR"),
-                            Locale("es", "UY"),
-                            Locale("es", "419"),
                             Locale("es", "US"),
+                            Locale("es", "419"),
+                            Locale("es", "MX"),
                             Locale("es", "ES"),
                             Locale("es")
                         )
@@ -222,7 +223,7 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
                             }
                         }
 
-                        // Buscar en las voces instaladas una voz masculina en español
+                        // Buscar la voz masculina neural de mayor complejidad y calidad (QUALITY_VERY_HIGH / network WaveNet)
                         runCatching {
                             val availableVoices = tts.voices?.filter { v ->
                                 v.locale.language.equals("es", ignoreCase = true)
@@ -231,13 +232,18 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
                             val selectedVoice = selectBestSpanishMaleVoice(availableVoices)
                             if (selectedVoice != null) {
                                 tts.voice = selectedVoice
-                                selectedMaleVoiceLabel = "Voz Hombre (${selectedVoice.locale.country.ifEmpty { "ES" }})"
+                                val qualityTag = if (selectedVoice.isNetworkConnectionRequired || selectedVoice.quality >= Voice.QUALITY_HIGH) {
+                                    "Neural HD"
+                                } else {
+                                    "Estudio"
+                                }
+                                selectedMaleVoiceLabel = "Voz Masculina $qualityTag (${selectedVoice.locale.country.ifEmpty { "ES" }})"
                             }
                         }
 
-                        // Registro grave masculino de cabina FM y cadencia natural de locutor
-                        tts.setPitch(0.80f)
-                        tts.setSpeechRate(0.98f)
+                        // Pitch 0.96f y velocidad 1.01f conservan la prosodia neural humana sin distorsión DSP robótica
+                        tts.setPitch(0.96f)
+                        tts.setSpeechRate(1.01f)
                         ttsReadyDeferred.complete(true)
                     } else {
                         ttsReadyDeferred.complete(false)
@@ -245,6 +251,13 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
                 } else {
                     ttsReadyDeferred.complete(false)
                 }
+            }
+
+            // Intentar primero el motor neural de Google Speech Services
+            androidTts = try {
+                TextToSpeech(appContext, initListener, "com.google.android.tts")
+            } catch (_: Exception) {
+                TextToSpeech(appContext, initListener)
             }
         }.onFailure {
             ttsReadyDeferred.complete(false)
@@ -255,49 +268,69 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
         if (spanishVoices.isEmpty()) return null
 
         val maleMarkers = listOf(
+            "-esf-", "-esd-", "-eef-", "-eed-", "-iom-", "-esc-",
             "male", "hombre", "masculin", "jorge", "carlos", "diego", "juan", "mateo",
-            "miguel", "pedro", "alberto", "raul", "-iom-", "-eef-", "-eed-", "-esd-", "-esc-"
+            "tomas", "alonso", "miguel", "pedro", "alberto", "raul"
         )
         val femaleMarkers = listOf(
+            "-sfb-", "-sfc-", "-sfd-", "-esa-", "-esb-",
             "female", "mujer", "femenin", "paulina", "monica", "elena", "helena", "sabina",
-            "laura", "francisca", "-sfb-", "-sfc-", "-sfd-", "-esa-", "-esb-"
+            "laura", "francisca", "paloma"
         )
 
-        // 1. Priorizar voces explícitamente masculinas en español (preferentemente AR/419/US/ES local)
-        val explicitMale = spanishVoices.firstOrNull { v ->
-            val id = v.name.lowercase()
-            maleMarkers.any { id.contains(it) } && !v.isNetworkConnectionRequired
-        } ?: spanishVoices.firstOrNull { v ->
+        // Ordenar por máxima calidad neural (QUALITY_VERY_HIGH = 500 > QUALITY_HIGH = 400) y preferir voces neurales de red (WaveNet)
+        val rankedVoices = spanishVoices.sortedWith(
+            compareByDescending<Voice> { it.quality }
+                .thenByDescending { it.isNetworkConnectionRequired || it.name.contains("network", ignoreCase = true) || it.name.contains("wavenet", ignoreCase = true) }
+                .thenByDescending {
+                    val country = it.locale.country.uppercase()
+                    when (country) {
+                        "AR" -> 4
+                        "US", "419", "UY" -> 3
+                        "MX", "CO" -> 2
+                        else -> 1
+                    }
+                }
+        )
+
+        // 1. Priorizar voces masculinas neurales de alta definición
+        val neuralMale = rankedVoices.firstOrNull { v ->
             val id = v.name.lowercase()
             maleMarkers.any { id.contains(it) }
         }
-        if (explicitMale != null) return explicitMale
+        if (neuralMale != null) return neuralMale
 
-        // 2. Si los nombres no incluyen marcador directo, elegir una voz que no tenga identificador femenino
-        val nonFemale = spanishVoices.firstOrNull { v ->
+        // 2. Si no tiene marcador explícito, elegir la voz de mayor calidad que no sea femenina
+        val nonFemaleHighQuality = rankedVoices.firstOrNull { v ->
             val id = v.name.lowercase()
-            femaleMarkers.none { id.contains(it) } && !v.isNetworkConnectionRequired
+            femaleMarkers.none { id.contains(it) }
         }
-        return nonFemale ?: spanishVoices.firstOrNull()
+        return nonFemaleHighQuality ?: rankedVoices.firstOrNull()
     }
 
     private suspend fun synthesizeGroqScriptToWavUri(scriptText: String, cacheKey: String): Uri? {
         if (scriptText.isBlank()) return null
 
-        // Esperar hasta 3.5s si el motor TTS recién se está inicializando en el teléfono
         val ready = withTimeoutOrNull(3500L) { ttsReadyDeferred.await() } ?: false
         val tts = androidTts ?: return null
         if (!ready) return null
 
-        val outDir = File(appContext.cacheDir, "groq_male_wav_v2").apply { mkdirs() }
-        val outFile = File(outDir, "locutor_m_${cacheKey.take(16)}.wav")
+        val outDir = File(appContext.cacheDir, "groq_neural_male_wav_v3").apply { mkdirs() }
+        val outFile = File(outDir, "locutor_neural_${cacheKey.take(16)}.wav")
         if (outFile.exists() && outFile.length() > 100L) {
             return Uri.fromFile(outFile)
         }
 
+        // Mejorar las pausas respiratorias para que el motor neural suene fluido y expresivo
+        val expressiveText = scriptText
+            .replace("...", ", ")
+            .replace("—", ", ")
+            .replace(Regex("\\s{2,}"), " ")
+            .trim()
+
         return withTimeoutOrNull(9500L) {
             val done = CompletableDeferred<Boolean>()
-            val utteranceId = "utt_male_${System.currentTimeMillis()}"
+            val utteranceId = "utt_neural_male_${System.currentTimeMillis()}"
 
             tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(id: String?) {}
@@ -315,10 +348,14 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
                 }
             })
 
+            val params = Bundle().apply {
+                putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
+            }
+
             val callResult = withContext(Dispatchers.Main) {
-                tts.setPitch(0.80f)
-                tts.setSpeechRate(0.98f)
-                tts.synthesizeToFile(scriptText, Bundle(), outFile, utteranceId)
+                tts.setPitch(0.96f)
+                tts.setSpeechRate(1.01f)
+                tts.synthesizeToFile(expressiveText, params, outFile, utteranceId)
             }
             if (callResult != TextToSpeech.SUCCESS) {
                 return@withTimeoutOrNull null
@@ -588,9 +625,10 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
 
     /**
      * Ajusta en tiempo real el volumen de la voz del locutor (tanto antes como durante la intervención).
+     * Inicia por defecto en 50% (0.50f).
      */
     fun setAnnouncerVoiceVolume(voiceVolume: Float) {
-        val clamped = voiceVolume.coerceIn(0.10f, 1.0f)
+        val clamped = voiceVolume.coerceIn(0.05f, 1.0f)
         voicePlayer.volume = clamped
         _state.update { it.copy(announcerVoiceVolume = clamped) }
     }
@@ -816,7 +854,18 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
                     )
                 }
 
-                completion.await()
+                // Tope estricto de 15 segundos máximos de audio de locución
+                val maxVoicePlayMs = (_state.value.maxInterventionDurationSeconds.coerceIn(6, 15) * 1000L)
+                val completedBeforeCap = withTimeoutOrNull(maxVoicePlayMs) {
+                    completion.await()
+                    true
+                } ?: false
+
+                if (!completedBeforeCap && voicePlayer.isPlaying) {
+                    voicePlayer.pause()
+                    voicePlayer.stop()
+                    voicePlayer.seekTo(0L)
+                }
 
                 // Subir gradualmente el volumen al volumen maestro vigente
                 val fadeUpMs = (_state.value.fadeDurationSeconds * 1000L).toLong().coerceAtLeast(250L)

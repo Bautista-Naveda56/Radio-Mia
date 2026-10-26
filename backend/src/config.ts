@@ -21,32 +21,30 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
   const customTtsModel = env.GROQ_TTS_MODEL?.trim();
   const customTtsVoice = env.GROQ_TTS_VOICE?.trim();
 
-  // Orden de prioridad para generación de guion según disponibilidad real en la cuenta Groq
+  // Orden de prioridad usando el modelo más avanzado de Groq (120B parámetros) primero
   const defaultTextModels = [
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
     "openai/gpt-oss-120b",
+    "llama-3.3-70b-versatile",
     "openai/gpt-oss-20b",
-    "qwen/qwen3.8-27b"
+    "llama-3.1-8b-instant"
   ];
 
-  // Modelos TTS en Groq priorizando español
+  // Modelos TTS neurales en Groq (Orpheus V1)
   const defaultSpanishTtsModels = [
+    "canopylabs/orpheus-v1-english",
     "canopylabs/orpheus-v1-spanish",
     "canopylabs/orpheus-spanish",
-    "playai-tts-es",
     "playai-tts"
   ];
 
-  // Voces masculinas de locutor en Groq (Orpheus / PlayAI)
+  // Voces masculinas de locutor en Groq Orpheus V1 (troy, daniel, austin) + español (mateo, javier, carlos)
   const defaultMaleVoices = [
-    "mateo",
-    "javier",
-    "carlos",
-    "diego",
     "troy",
     "daniel",
-    "austin"
+    "austin",
+    "mateo",
+    "javier",
+    "carlos"
   ];
 
   return {
@@ -63,8 +61,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
       ? [customTtsVoice, ...defaultMaleVoices.filter((v) => v !== customTtsVoice)]
       : defaultMaleVoices,
     sttModel: env.GROQ_STT_MODEL?.trim() || "whisper-large-v3-turbo",
-    requestTimeoutMs: Number(env.GROQ_TIMEOUT_MS || 11000),
-    promptVersion: "v2.0-male-extended-verified"
+    requestTimeoutMs: Number(env.GROQ_TIMEOUT_MS || 15000),
+    promptVersion: "v3.0-120b-15s-neural"
   };
 }
 

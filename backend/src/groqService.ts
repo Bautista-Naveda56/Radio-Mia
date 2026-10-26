@@ -10,7 +10,7 @@ import {
 } from "./types";
 
 export const RADIO_MIA_SYSTEM_PROMPT = `Sos el locutor masculino principal de Radio Mía, una radio FM argentina personal, moderna, cálida y entretenida.
-Hablás en español rioplatense natural (usando "vos", "acá", "seguimos", "acompañándote"), con voz de hombre de radio, buena presencia, cercanía y energía.
+Hablás en español rioplatense natural (usando "vos", "acá", "seguimos", "acompañándote"), con voz de hombre de radio, buena presencia, cercanía y fluidez humana.
 No exageres el lunfardo ni uses expresiones forzadas o caricaturescas.
 Sonás como un verdadero conductor masculino de radio FM argentina en cabina, nunca como un asistente virtual ni un robot.
 No copies frases, nombres, voces ni identidad de Radio Disney ni de ninguna otra emisora existente.
@@ -22,12 +22,9 @@ REGLA ESTRICTA DE VERACIDAD (PROHIBIDO INVENTAR DATOS):
 - Si el álbum figura como "Biblioteca del Teléfono", "Biblioteca Local", "Download" o "No especificado", NO menciones el álbum en absoluto.
 - Incluso cuando conozcas al artista o la canción, NO cites años específicos ni anécdotas dudosas: enfocate en la compañía de la radio, las sensaciones, el clima musical, la energía del tema y el momento compartido con el oyente.
 
-EXTENSIÓN Y ESTRUCTURA DE LA LOCUCIÓN:
-- Tu intervención debe ser EXTENSA, fluida y completa: entre 3 y 5 oraciones bien desarrolladas (entre 50 y 85 palabras, pensada para unos 18 a 25 segundos de aire).
-- Estructura ideal:
-  1) Entrada cálida de cabina conectando con quien está escuchando Radio Mía y el clima del momento.
-  2) Desarrollo sobre la energía, el ritmo o la atmósfera que propone la música que suena.
-  3) Presentación natural del tema (y del artista solo si es un artista real confirmado) e invitación a subir el volumen y disfrutarlo.
+DURACIÓN MÁXIMA 15 SEGUNDOS Y CADENCIA HUMANA:
+- Tu intervención debe durar como MÁXIMO 15 SEGUNDOS al hablarse (entre 2 y 3 oraciones fluidas, aproximadamente 28 a 40 palabras, nunca más de 42 palabras).
+- Escribí con puntuación expresiva de locución radial (comas naturales, puntos suspensivos "..." para pausas breves de respiración y entonación cálida) para que la síntesis de voz suene 100% natural, orgánica y nada robótica.
 Devolvé únicamente el JSON pedido.`;
 
 function sanitizeSongMetadata(req: Required<InterventionRequest>): {
@@ -140,9 +137,8 @@ export class GroqRadioService {
         if (out.includes("speech") || id.includes("tts") || id.includes("orpheus")) {
           speechModels.push(id);
           const lower = id.toLowerCase();
-          const isExplicitNonSpanish =
-            lower.includes("english") || lower.includes("arabic") || lower.endsWith("-en");
-          if (!isExplicitNonSpanish) {
+          // Permitir canopylabs/orpheus-v1-english además de modelos españoles (solo excluir árabe)
+          if (!lower.includes("arabic")) {
             spanishSpeechModels.push(id);
           }
         } else if (out.includes("transcription") || id.includes("whisper")) {
@@ -172,22 +168,26 @@ export class GroqRadioService {
   public async selectBestTextModel(): Promise<string> {
     try {
       const discovered = await this.discoverModels();
-      const activeLlama = discovered.textModels.find((m) =>
-        m.toLowerCase().includes("llama")
-      );
-      if (activeLlama) return activeLlama;
-
+      // Priorizar siempre el modelo más avanzado de Groq (openai/gpt-oss-120b o llama-3.3-70b-versatile)
       for (const candidate of this.config.preferredTextModels) {
         if (discovered.textModels.includes(candidate)) {
           return candidate;
         }
       }
 
+      const active120b = discovered.textModels.find((m) => m.includes("120b"));
+      if (active120b) return active120b;
+
+      const activeLlama = discovered.textModels.find((m) =>
+        m.toLowerCase().includes("llama")
+      );
+      if (activeLlama) return activeLlama;
+
       if (discovered.textModels.length > 0) {
         return discovered.textModels[0];
       }
     } catch {
-      // Continuar con modelo por defecto
+      // Continuar con el modelo más avanzado por defecto
     }
     return "openai/gpt-oss-120b";
   }
@@ -248,18 +248,19 @@ export class GroqRadioService {
 - Álbum confirmado: ${cleanAlbum ? `"${cleanAlbum}"` : "No especificado (NO menciones ningún álbum)"}
 - Estilo de la radio: ${req.radioStyle}
 - Tipo de intervención: ${req.interventionType}
+- Duración máxima permitida: ${Math.min(15, req.maxDurationSeconds)} segundos
 
 INSTRUCCIONES CLAVE:
-1. Que sea una intervención EXTENSA y completa: entre 3 y 5 oraciones fluidas (aproximadamente 55 a 85 palabras, unos 18 a 25 segundos hablados).
-2. NO inventes absolutamente ningún dato falso: no digas en qué año salió, no inventes historias de grabación, premios ni datos biográficos. Hablá desde la emoción de la radio, la compañía, el clima del estilo "${req.radioStyle}" y el placer de escuchar "${cleanTitle}"${cleanArtist ? ` con ${cleanArtist}` : ""}.
-3. Usá español rioplatense masculino natural, cálido y con presencia de estudio FM.
+1. DURACIÓN MÁXIMA 15 SEGUNDOS: Escribí entre 2 y 3 oraciones dinámicas y cálidas (entre 26 y 40 palabras como máximo, para que hablada dure entre 10 y 15 segundos).
+2. CERO DATOS FALSOS: NO inventes en qué año salió, premios, fechas ni historias. Hablá desde la compañía de la radio, la atmósfera del estilo "${req.radioStyle}" y el placer de escuchar "${cleanTitle}"${cleanArtist ? ` junto a ${cleanArtist}` : ""}.
+3. FLUIDEZ HUMANA: Usá español rioplatense masculino natural, con comas y pausas suaves para que la voz suene expresiva y humana.
 
 Devolvé únicamente un objeto JSON válido con esta estructura exacta:
 {
   "type": "${req.interventionType}",
-  "text": "Locución extensa de 3 a 5 oraciones en español rioplatense, cálida, sin inventar datos falsos...",
+  "text": "Locución de 2 a 3 oraciones (máximo 15 segundos) en español rioplatense, cálida y sin datos inventados...",
   "tone": "energico | calido | nocturno | relajado",
-  "estimatedDurationSeconds": 20
+  "estimatedDurationSeconds": 12
 }`;
 
     let lastError = "No se pudo generar el guion con los modelos disponibles.";
@@ -283,7 +284,7 @@ Devolvé únicamente un objeto JSON válido con esta estructura exacta:
             ],
             response_format: { type: "json_object" },
             temperature: 0.65,
-            max_tokens: 650
+            max_tokens: 4096
           }),
           signal: controller.signal
         });
@@ -338,8 +339,9 @@ Devolvé únicamente un objeto JSON válido con esta estructura exacta:
   }
 
   /**
-   * Intenta sintetizar la voz masculina en español mediante el endpoint Text-to-Speech de Groq (/openai/v1/audio/speech).
-   * Usa las voces masculinas configuradas (mateo, javier, carlos, troy, daniel, austin).
+   * Intenta sintetizar la voz masculina neural en Groq (/openai/v1/audio/speech)
+   * usando Orpheus V1 (canopylabs/orpheus-v1-english / canopylabs/orpheus-v1-spanish)
+   * con voces masculinas expresivas (troy, daniel, austin, mateo).
    */
   public async generateSpanishSpeech(
     text: string,
@@ -351,26 +353,30 @@ Devolvé únicamente un objeto JSON válido con esta estructura exacta:
     errorCode?: string;
     statusMessage: string;
   }> {
-    let spanishModels: string[] = [];
+    let discoveredSpeechModels: string[] = [];
     try {
       const discovered = await this.discoverModels();
-      spanishModels = discovered.spanishSpeechModels;
+      discoveredSpeechModels = discovered.spanishSpeechModels;
     } catch {
-      spanishModels = [];
+      discoveredSpeechModels = [];
     }
 
     const modelsToTry =
-      spanishModels.length > 0
-        ? spanishModels
+      discoveredSpeechModels.length > 0
+        ? discoveredSpeechModels
         : [this.config.preferredSpanishTtsModels[0]];
-    const primaryMaleVoice = this.config.preferredSpanishVoices[0] || "mateo";
+    const primaryMaleVoice = this.config.preferredSpanishVoices[0] || "troy";
 
-    let lastErrorCode = "spanish_tts_model_not_available";
+    let lastErrorCode = "groq_orpheus_tts_unavailable";
     let lastErrorDetail =
-      `Modelo TTS (${modelsToTry[0]} / voz masculina '${primaryMaleVoice}') no habilitado directamente en Groq; Android sintetiza la voz masculina en español para el guion.`;
+      `Usando síntesis neural masculina de alta definición en el dispositivo para el guion de ${modelsToTry[0]}.`;
 
     for (const model of modelsToTry) {
-      for (const maleVoice of this.config.preferredSpanishVoices.slice(0, 2)) {
+      const voicesForModel = model.includes("english")
+        ? ["troy", "daniel", "austin"]
+        : this.config.preferredSpanishVoices.slice(0, 3);
+
+      for (const maleVoice of voicesForModel) {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), this.config.requestTimeoutMs);
         try {
@@ -391,9 +397,15 @@ Devolvé únicamente un objeto JSON válido con esta estructura exacta:
           });
 
           if (!res.ok) {
+            const errText = await res.text();
             lastErrorCode = `groq_tts_http_${res.status}`;
+            if (errText.includes("model_terms_required")) {
+              lastErrorDetail =
+                `Aceptá los términos de ${model} en console.groq.com/playground para audio directo de Orpheus; mientras tanto se usa voz neural masculina HD en Android.`;
+              break;
+            }
             lastErrorDetail = sanitizeErrorMessage(
-              `TTS (${model} / voz masculina '${maleVoice}') devolvió ${res.status}. Sintetizando voz masculina en Android.`,
+              `TTS (${model} / '${maleVoice}') devolvió ${res.status}. Sintetizando voz neural masculina HD en Android.`,
               apiKey
             );
             continue;
@@ -412,7 +424,7 @@ Devolvé únicamente un objeto JSON válido con esta estructura exacta:
             audioBase64: buffer.toString("base64"),
             modelUsed: model,
             voiceUsed: maleVoice,
-            statusMessage: `Voz masculina generada con Groq TTS (${model} • ${maleVoice})`
+            statusMessage: `Voz neural masculina generada con Groq Orpheus (${model} • ${maleVoice})`
           };
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -426,7 +438,7 @@ Devolvé únicamente un objeto JSON válido con esta estructura exacta:
 
     return {
       audioBase64: null,
-      modelUsed: modelsToTry[0] || "canopylabs/orpheus-v1-spanish",
+      modelUsed: modelsToTry[0] || "canopylabs/orpheus-v1-english",
       voiceUsed: primaryMaleVoice,
       errorCode: lastErrorCode,
       statusMessage: lastErrorDetail

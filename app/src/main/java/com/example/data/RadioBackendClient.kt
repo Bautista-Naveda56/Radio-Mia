@@ -93,7 +93,7 @@ class RadioBackendClient(
         song: SongItem,
         radioStyle: RadioStyle,
         interventionType: InterventionType,
-        promptVersion: String = "v2.0-male-extended-verified"
+        promptVersion: String = "v3.0-120b-15s-neural"
     ): String {
         val raw = listOf(
             song.title.trim().lowercase(),
@@ -121,7 +121,7 @@ class RadioBackendClient(
                 if (code in 200..299) {
                     val body = conn.inputStream.bufferedReader().use { it.readText() }
                     val json = JSONObject(body)
-                    val model = json.optString("activeTextModel", "Groq")
+                    val model = json.optString("activeTextModel", "openai/gpt-oss-120b")
                     val groqOk = json.optBoolean("groqConfigured", false)
                     return@withContext true to "Conectado ($base • Modelo: $model • Clave en backend: ${if (groqOk) "Presente" else "Ausente"})"
                 }
@@ -182,7 +182,7 @@ class RadioBackendClient(
             put("durationSeconds", (song.durationMs / 1000L).toInt().coerceAtLeast(1))
             put("radioStyle", radioStyle.displayName)
             put("interventionType", interventionType.apiValue)
-            put("maxDurationSeconds", maxDurationSeconds.coerceIn(8, 35))
+            put("maxDurationSeconds", maxDurationSeconds.coerceIn(6, 15))
         }
 
         val baseUrls = candidateBaseUrls(primaryBaseUrl)
@@ -235,10 +235,10 @@ class RadioBackendClient(
                 }
 
                 val tone = json.optString("tone", "calido")
-                val estimatedSeconds = json.optInt("estimatedDurationSeconds", 8).coerceIn(4, 15)
-                val textModelUsed = json.optString("textModelUsed", "Groq LLM")
-                val ttsModelUsed = json.optString("ttsModelUsed", "Groq TTS")
-                val ttsVoiceUsed = json.optString("ttsVoiceUsed", "diana")
+                val estimatedSeconds = json.optInt("estimatedDurationSeconds", 12).coerceIn(5, 15)
+                val textModelUsed = json.optString("textModelUsed", "openai/gpt-oss-120b")
+                val ttsModelUsed = json.optString("ttsModelUsed", "canopylabs/orpheus-v1-english")
+                val ttsVoiceUsed = json.optString("ttsVoiceUsed", "troy")
                 val ttsStatusMessage = json.optString("ttsStatusMessage", "Usando demo_locutor.wav")
                 val audioAvailable = json.optBoolean("audioAvailable", false)
                 val audioBase64 = if (json.isNull("audioBase64")) "" else json.optString("audioBase64", "")

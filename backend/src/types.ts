@@ -66,7 +66,7 @@ export const ALLOWED_INTERVENTION_TYPES: ReadonlySet<string> = new Set([
 ]);
 
 export const MAX_FIELD_LENGTH = 240;
-export const MAX_SCRIPT_LENGTH = 1200;
+export const MAX_SCRIPT_LENGTH = 480;
 
 export function validateInterventionRequest(
   body: unknown
@@ -118,8 +118,8 @@ export function validateInterventionRequest(
     : 180;
 
   const maxDurationSeconds = typeof raw.maxDurationSeconds === "number" && Number.isFinite(raw.maxDurationSeconds)
-    ? Math.max(8, Math.min(35, Math.round(raw.maxDurationSeconds)))
-    : 22;
+    ? Math.max(6, Math.min(15, Math.round(raw.maxDurationSeconds)))
+    : 15;
 
   return {
     valid: true,
@@ -163,12 +163,12 @@ export function validateGeneratedScriptJson(
     : "calido";
 
   const wordCount = rawText.split(/\s+/).length;
-  const computedSeconds = Math.ceil(wordCount / 2.5);
+  const computedSeconds = Math.ceil(wordCount / 2.6);
   const estimatedRaw = typeof obj.estimatedDurationSeconds === "number" && Number.isFinite(obj.estimatedDurationSeconds)
-    ? Math.max(computedSeconds, Math.round(obj.estimatedDurationSeconds))
-    : Math.max(8, Math.min(maxDurationSeconds, computedSeconds));
+    ? Math.min(15, Math.max(computedSeconds, Math.round(obj.estimatedDurationSeconds)))
+    : Math.max(6, Math.min(maxDurationSeconds, computedSeconds));
 
-  const estimatedDurationSeconds = Math.max(6, Math.min(35, estimatedRaw));
+  const estimatedDurationSeconds = Math.max(5, Math.min(15, estimatedRaw));
 
   return {
     valid: true,
