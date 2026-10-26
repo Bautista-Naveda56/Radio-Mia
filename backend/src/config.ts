@@ -62,7 +62,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
       : defaultMaleVoices,
     sttModel: env.GROQ_STT_MODEL?.trim() || "whisper-large-v3-turbo",
     requestTimeoutMs: Number(env.GROQ_TIMEOUT_MS || 15000),
-    promptVersion: "v3.0-120b-15s-neural"
+    promptVersion: "v4.0-120b-real-trivia-research"
   };
 }
 

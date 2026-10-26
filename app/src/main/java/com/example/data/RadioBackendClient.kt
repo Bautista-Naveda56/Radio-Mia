@@ -93,7 +93,7 @@ class RadioBackendClient(
         song: SongItem,
         radioStyle: RadioStyle,
         interventionType: InterventionType,
-        promptVersion: String = "v3.0-120b-15s-neural"
+        promptVersion: String = "v4.0-120b-real-trivia-research"
     ): String {
         val raw = listOf(
             song.title.trim().lowercase(),
@@ -137,15 +137,23 @@ class RadioBackendClient(
         maxDurationSeconds: Int,
         primaryBaseUrl: String
     ): BackendInterventionOutcome = withContext(Dispatchers.IO) {
-        val cacheKey = buildCacheKey(song, radioStyle, interventionType)
+        val isDatoCurioso = interventionType == InterventionType.DATO_CURIOSO
+        val baseKey = buildCacheKey(song, radioStyle, interventionType)
+        val cacheKey = if (isDatoCurioso) {
+            "${baseKey}_${System.currentTimeMillis() % 100000}"
+        } else {
+            baseKey
+        }
 
-        synchronized(memoryCache) {
-            val cached = memoryCache[cacheKey]
-            if (cached != null) {
-                return@withContext when (cached) {
-                    is BackendInterventionOutcome.SuccessWithGroqAudio -> cached.copy(cached = true)
-                    is BackendInterventionOutcome.SuccessScriptWithFallbackAudio -> cached.copy(cached = true)
-                    else -> cached
+        if (!isDatoCurioso) {
+            synchronized(memoryCache) {
+                val cached = memoryCache[cacheKey]
+                if (cached != null) {
+                    return@withContext when (cached) {
+                        is BackendInterventionOutcome.SuccessWithGroqAudio -> cached.copy(cached = true)
+                        is BackendInterventionOutcome.SuccessScriptWithFallbackAudio -> cached.copy(cached = true)
+                        else -> cached
+                    }
                 }
             }
         }

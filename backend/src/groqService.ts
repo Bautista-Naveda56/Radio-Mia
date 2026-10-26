@@ -9,38 +9,58 @@ import {
   validateGeneratedScriptJson
 } from "./types";
 
-export const RADIO_MIA_SYSTEM_PROMPT = `Sos el locutor masculino principal de Radio Mía, una radio FM argentina personal, moderna, cálida y entretenida.
-Hablás en español rioplatense natural (usando "vos", "acá", "seguimos", "acompañándote"), con voz de hombre de radio, buena presencia, cercanía y fluidez humana.
+export const RADIO_MIA_SYSTEM_PROMPT = `Sos el locutor masculino principal de Radio Mía, una radio FM argentina personal, moderna, cálida y con profundo conocimiento musical.
+Hablás en español rioplatense natural (usando "vos", "acá", "seguimos", "mirá este dato", "escuchá esto"), con voz de hombre de radio, buena presencia, cercanía y fluidez humana.
 No exageres el lunfardo ni uses expresiones forzadas o caricaturescas.
 Sonás como un verdadero conductor masculino de radio FM argentina en cabina, nunca como un asistente virtual ni un robot.
 No copies frases, nombres, voces ni identidad de Radio Disney ni de ninguna otra emisora existente.
 No digas jamás que sos una inteligencia artificial.
 
-REGLA ESTRICTA DE VERACIDAD (PROHIBIDO INVENTAR DATOS):
-- Está TERMINANTEMENTE PROHIBIDO inventar datos falsos sobre canciones, artistas, álbumes, años de lanzamiento, fechas, premios, posiciones en rankings, discográficas, integrantes de bandas o historias detrás de la canción.
-- Si el artista figura como "Artista Local" o "No especificado", NO menciones ningún artista.
-- Si el álbum figura como "Biblioteca del Teléfono", "Biblioteca Local", "Download" o "No especificado", NO menciones el álbum en absoluto.
-- Incluso cuando conozcas al artista o la canción, NO cites años específicos ni anécdotas dudosas: enfocate en la compañía de la radio, las sensaciones, el clima musical, la energía del tema y el momento compartido con el oyente.
+REGLAS SEGÚN EL TIPO DE INTERVENCIÓN:
+1. CUANDO EL TIPO ES "dato_curioso" (MODO INVESTIGACIÓN MUSICAL Y TRIVIA REAL):
+   - Tenés PROHIBIDO tirar un saludo genérico o hablar solo del clima.
+   - DEBÉS contar un DATO CURIOSO REAL, CONCRETO Y ESPECÍFICO sobre la canción o el artista (por ejemplo: quién la compuso, en qué estudio o ciudad se grabó, de qué álbum forma parte y en qué año salió, un detalle de sus instrumentos/letra, una anécdota real de grabación o un récord real del tema).
+   - Usá la información verificada de investigación (Wikipedia / catálogo musical) provista en el prompt y tu conocimiento enciclopédico real sobre esa canción.
+   - Si la canción tiene varios datos reales interesantes, elegí UNO al azar que sorprenda al oyente y contalo con onda de locutor de radio FM.
+2. REGLA DE VERACIDAD:
+   - Usá únicamente hechos reales y verificados sobre la canción y el artista; no inventes premios falsos ni menciones etiquetas técnicas del teléfono como "Artista Local", "Biblioteca del Teléfono" o "Download".
 
 DURACIÓN MÁXIMA 15 SEGUNDOS Y CADENCIA HUMANA:
-- Tu intervención debe durar como MÁXIMO 15 SEGUNDOS al hablarse (entre 2 y 3 oraciones fluidas, aproximadamente 28 a 40 palabras, nunca más de 42 palabras).
+- Tu intervención debe durar como MÁXIMO 15 SEGUNDOS al hablarse (entre 2 y 3 oraciones fluidas, aproximadamente 28 a 42 palabras).
 - Escribí con puntuación expresiva de locución radial (comas naturales, puntos suspensivos "..." para pausas breves de respiración y entonación cálida) para que la síntesis de voz suene 100% natural, orgánica y nada robótica.
 Devolvé únicamente el JSON pedido.`;
+
+export interface SongResearchResult {
+  cleanTitle: string;
+  cleanArtist: string | null;
+  cleanAlbum: string | null;
+  verifiedYear: string | null;
+  verifiedGenre: string | null;
+  wikipediaFacts: string | null;
+}
+
+const TRIVIA_ANGLES = [
+  "el origen o composición de la canción (quién la escribió, cómo nació la idea o qué inspira su letra)",
+  "el detalle de grabación o producción (en qué estudio, año o álbum se grabó y qué sonido o instrumento la destaca)",
+  "el impacto cultural, hito o curiosidad poco conocida de esta canción en la carrera del artista",
+  "un dato específico sobre la historia del álbum al que pertenece o un detalle musical distintivo del tema"
+];
 
 function sanitizeSongMetadata(req: Required<InterventionRequest>): {
   cleanTitle: string;
   cleanArtist: string | null;
   cleanAlbum: string | null;
 } {
-  const cleanTitle = req.title
+  let rawTitle = req.title
     .replace(/\.(mp3|wav|flac|m4a|ogg)$/i, "")
-    .replace(/\b(official\s*video|video\s*oficial|lyric\s*video|lyrics|audio\s*oficial|hd|hq|320kbps)\b/gi, "")
+    .replace(/\b(official\s*video|video\s*oficial|lyric\s*video|lyrics|audio\s*oficial|hd|hq|320kbps|remastered|remasterizado)\b/gi, "")
     .replace(/[\(\[\{]\s*[\)\]\}]/g, "")
     .replace(/\s{2,}/g, " ")
     .trim() || req.title;
 
   const genericArtists = new Set([
     "artista local",
+    "no especificado",
     "<unknown>",
     "unknown",
     "desconocido",
@@ -49,12 +69,22 @@ function sanitizeSongMetadata(req: Required<InterventionRequest>): {
     "audio"
   ]);
   const rawArtist = req.artist.trim();
-  const cleanArtist = genericArtists.has(rawArtist.toLowerCase()) ? null : rawArtist;
+  let cleanArtist = genericArtists.has(rawArtist.toLowerCase()) ? null : rawArtist;
+
+  // Si el archivo MP3 tiene formato "Artista - Canción" en el título y no hay artista en MediaStore, extraerlo automáticamente
+  if (!cleanArtist && rawTitle.includes(" - ")) {
+    const parts = rawTitle.split(" - ").map((p) => p.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      cleanArtist = parts[0];
+      rawTitle = parts.slice(1).join(" - ");
+    }
+  }
 
   const genericAlbums = new Set([
     "biblioteca del teléfono",
     "biblioteca del telefono",
     "biblioteca local",
+    "no especificado",
     "<unknown>",
     "unknown",
     "download",
@@ -68,7 +98,16 @@ function sanitizeSongMetadata(req: Required<InterventionRequest>): {
   const rawAlbum = req.album.trim();
   const cleanAlbum = genericAlbums.has(rawAlbum.toLowerCase()) ? null : rawAlbum;
 
-  return { cleanTitle, cleanArtist, cleanAlbum };
+  return { cleanTitle: rawTitle, cleanArtist, cleanAlbum };
+}
+
+function normalizeForMatch(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, "")
+    .trim();
 }
 
 export interface GroqAccountModels {
@@ -82,10 +121,146 @@ export class GroqRadioService {
   private readonly config: BackendConfig;
   private readonly cache: InterventionCache;
   private cachedAccountModels: { data: GroqAccountModels; fetchedAt: number } | null = null;
+  private readonly researchCache = new Map<string, SongResearchResult>();
 
   constructor(config: BackendConfig, cache: InterventionCache) {
     this.config = config;
     this.cache = cache;
+  }
+
+  /**
+   * Investiga en tiempo real la canción usando iTunes Search API (catálogo AR) + Wikipedia en Español
+   * para obtener artista real, álbum, año de lanzamiento y extractos enciclopédicos verificados.
+   */
+  public async researchSongContext(req: Required<InterventionRequest>): Promise<SongResearchResult> {
+    const { cleanTitle, cleanArtist, cleanAlbum } = sanitizeSongMetadata(req);
+    const cacheKey = `${cleanTitle.toLowerCase()}|${(cleanArtist || "").toLowerCase()}`;
+    const existing = this.researchCache.get(cacheKey);
+    if (existing) {
+      return existing;
+    }
+
+    let resolvedArtist = cleanArtist;
+    let resolvedAlbum = cleanAlbum;
+    let verifiedYear: string | null = null;
+    let verifiedGenre: string | null = null;
+    let wikipediaFacts: string | null = null;
+
+    const searchQuery = resolvedArtist ? `${cleanTitle} ${resolvedArtist}` : cleanTitle;
+
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 2800);
+
+      try {
+        // 1. Buscar metadatos verificados en el catálogo musical (iTunes AR)
+        const itunesUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(searchQuery)}&entity=song&limit=3&country=AR`;
+        const itunesPromise = fetch(itunesUrl, {
+          headers: { "User-Agent": "RadioMiaBackend/1.0" },
+          signal: controller.signal
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null);
+
+        // 2. Buscar artículos enciclopédicos en Wikipedia en Español sobre la canción y el artista
+        const wikiQuery = resolvedArtist
+          ? `"${cleanTitle}" ${resolvedArtist}`
+          : `${cleanTitle} canción`;
+        const wikiSearchUrl = `https://es.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(wikiQuery)}&utf8=1&format=json&srlimit=3`;
+        const wikiPromise = fetch(wikiSearchUrl, {
+          headers: { "User-Agent": "RadioMiaBackend/1.0" },
+          signal: controller.signal
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null);
+
+        const [itunesData, wikiSearchData] = (await Promise.all([itunesPromise, wikiPromise])) as [
+          {
+            results?: Array<{
+              trackName?: string;
+              artistName?: string;
+              collectionName?: string;
+              releaseDate?: string;
+              primaryGenreName?: string;
+            }>;
+          } | null,
+          { query?: { search?: Array<{ title?: string }> } } | null
+        ];
+
+        const normTargetTitle = normalizeForMatch(cleanTitle);
+        const matchedTrack = (itunesData?.results || []).find((t) => {
+          const normCandidate = normalizeForMatch(t.trackName || "");
+          return (
+            normCandidate.includes(normTargetTitle) ||
+            normTargetTitle.includes(normCandidate)
+          );
+        });
+
+        if (matchedTrack) {
+          if (!resolvedArtist && matchedTrack.artistName) {
+            resolvedArtist = matchedTrack.artistName;
+          }
+          if (!resolvedAlbum && matchedTrack.collectionName) {
+            resolvedAlbum = matchedTrack.collectionName;
+          }
+          if (matchedTrack.releaseDate && matchedTrack.releaseDate.length >= 4) {
+            verifiedYear = matchedTrack.releaseDate.slice(0, 4);
+          }
+          if (matchedTrack.primaryGenreName) {
+            verifiedGenre = matchedTrack.primaryGenreName;
+          }
+        }
+
+        const wikiTitles = (wikiSearchData?.query?.search || [])
+          .map((s) => s.title)
+          .filter((t): t is string => Boolean(t))
+          .slice(0, 2);
+
+        if (wikiTitles.length > 0) {
+          const extractUrl = `https://es.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=1&explaintext=1&titles=${encodeURIComponent(wikiTitles.join("|"))}&format=json`;
+          const extractRes = await fetch(extractUrl, {
+            headers: { "User-Agent": "RadioMiaBackend/1.0" },
+            signal: controller.signal
+          }).catch(() => null);
+
+          if (extractRes && extractRes.ok) {
+            const extractJson = (await extractRes.json()) as {
+              query?: { pages?: Record<string, { title?: string; extract?: string }> };
+            };
+            const snippets: string[] = [];
+            for (const page of Object.values(extractJson.query?.pages || {})) {
+              const ext = (page.extract || "").replace(/\s+/g, " ").trim();
+              if (ext.length > 30) {
+                snippets.push(`[${page.title}]: ${ext.slice(0, 480)}`);
+              }
+            }
+            if (snippets.length > 0) {
+              wikipediaFacts = snippets.join("\n");
+            }
+          }
+        }
+      } finally {
+        clearTimeout(timer);
+      }
+    } catch {
+      // Continuar de forma segura si no hay red externa disponible
+    }
+
+    const result: SongResearchResult = {
+      cleanTitle,
+      cleanArtist: resolvedArtist,
+      cleanAlbum: resolvedAlbum,
+      verifiedYear,
+      verifiedGenre,
+      wikipediaFacts
+    };
+
+    if (this.researchCache.size >= 100) {
+      const oldestKey = this.researchCache.keys().next().value;
+      if (oldestKey) this.researchCache.delete(oldestKey);
+    }
+    this.researchCache.set(cacheKey, result);
+    return result;
   }
 
   public async discoverModels(): Promise<GroqAccountModels> {
@@ -137,7 +312,6 @@ export class GroqRadioService {
         if (out.includes("speech") || id.includes("tts") || id.includes("orpheus")) {
           speechModels.push(id);
           const lower = id.toLowerCase();
-          // Permitir canopylabs/orpheus-v1-english además de modelos españoles (solo excluir árabe)
           if (!lower.includes("arabic")) {
             spanishSpeechModels.push(id);
           }
@@ -168,7 +342,6 @@ export class GroqRadioService {
   public async selectBestTextModel(): Promise<string> {
     try {
       const discovered = await this.discoverModels();
-      // Priorizar siempre el modelo más avanzado de Groq (openai/gpt-oss-120b o llama-3.3-70b-versatile)
       for (const candidate of this.config.preferredTextModels) {
         if (discovered.textModels.includes(candidate)) {
           return candidate;
@@ -200,10 +373,17 @@ export class GroqRadioService {
       throw new Error("MISSING_GROQ_API_KEY");
     }
 
-    const cacheKey = this.cache.buildKey(req, this.config.promptVersion);
-    const cached = this.cache.get(cacheKey);
-    if (cached) {
-      return cached;
+    const isDatoCurioso = req.interventionType === "dato_curioso";
+    const baseCacheKey = this.cache.buildKey(req, this.config.promptVersion);
+    const cacheKey = isDatoCurioso
+      ? `${baseCacheKey}_${Math.floor(Math.random() * 10000)}`
+      : baseCacheKey;
+
+    if (!isDatoCurioso) {
+      const cached = this.cache.get(cacheKey);
+      if (cached) {
+        return cached;
+      }
     }
 
     const { script, modelUsed } = await this.generateScriptWithFallbackModels(req, apiKey);
@@ -226,7 +406,9 @@ export class GroqRadioService {
       ttsStatusMessage: ttsResult.statusMessage
     };
 
-    this.cache.set(cacheKey, response);
+    if (!isDatoCurioso) {
+      this.cache.set(cacheKey, response);
+    }
     return response;
   }
 
@@ -240,25 +422,46 @@ export class GroqRadioService {
       ...this.config.preferredTextModels.filter((m) => m !== primaryModel)
     ];
 
-    const { cleanTitle, cleanArtist, cleanAlbum } = sanitizeSongMetadata(req);
+    const research = await this.researchSongContext(req);
+    const { cleanTitle, cleanArtist, cleanAlbum, verifiedYear, verifiedGenre, wikipediaFacts } = research;
+    const isDatoCurioso = req.interventionType === "dato_curioso";
+    const randomTriviaAngle = TRIVIA_ANGLES[Math.floor(Math.random() * TRIVIA_ANGLES.length)];
+
+    const researchBlock = [
+      `- Título de la canción: "${cleanTitle}"`,
+      `- Artista verificado: ${cleanArtist ? `"${cleanArtist}"` : "No especificado en el archivo (si reconocés con total certeza de qué canción famosa se trata por su título, podés nombrar a su autor real)"}`,
+      `- Álbum verificado: ${cleanAlbum ? `"${cleanAlbum}"` : "No especificado"}`,
+      verifiedYear ? `- Año de lanzamiento verificado: ${verifiedYear}` : null,
+      verifiedGenre ? `- Género de catálogo: ${verifiedGenre}` : null,
+      wikipediaFacts ? `\nDATOS ENCICLOPÉDICOS INVESTIGADOS EN TIEMPO REAL (WIKIPEDIA):\n${wikipediaFacts}` : null
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const specificInstruction = isDatoCurioso
+      ? `MODO DATO CURIOSO REAL (OBLIGATORIO):
+1. El oyente pidió específicamente un "DATO CURIOSO" sobre "${cleanTitle}"${cleanArtist ? ` de ${cleanArtist}` : ""}.
+2. PROHIBIDO dar un mensaje genérico de bienvenida o hablar solo de "qué linda música".
+3. DEBÉS contar una curiosidad real, concreta y específica sobre esta canción o su artista enfocándote hoy en: ${randomTriviaAngle}.
+4. Apoyate en los DATOS ENCICLOPÉDICOS INVESTIGADOS arriba y en tu conocimiento real sobre "${cleanTitle}"${cleanArtist ? ` (${cleanArtist})` : ""}. (Si es una pista instrumental de estudio de Buenos Aires, contá una curiosidad real sobre la historia musical nocturna porteña o del instrumento protagonista).
+5. Duración máxima: 15 segundos hablados (2 a 3 oraciones dinámicas, entre 28 y 42 palabras).`
+      : `INSTRUCCIONES CLAVE:
+1. DURACIÓN MÁXIMA 15 SEGUNDOS: Escribí entre 2 y 3 oraciones dinámicas y cálidas (entre 26 y 40 palabras como máximo, para que hablada dure entre 10 y 15 segundos).
+2. VERACIDAD: Usá los datos verificados de arriba sin inventar información falsa.
+3. FLUIDEZ HUMANA: Usá español rioplatense masculino natural, con comas y pausas suaves para que la voz suene expresiva y humana.`;
 
     const userPrompt = `Generá una intervención de locutor masculino en vivo para Radio Mía sobre la canción que está sonando:
-- Título de la canción: "${cleanTitle}"
-- Artista confirmado: ${cleanArtist ? `"${cleanArtist}"` : "No especificado (NO nombres ni inventes ningún artista)"}
-- Álbum confirmado: ${cleanAlbum ? `"${cleanAlbum}"` : "No especificado (NO menciones ningún álbum)"}
+${researchBlock}
 - Estilo de la radio: ${req.radioStyle}
 - Tipo de intervención: ${req.interventionType}
 - Duración máxima permitida: ${Math.min(15, req.maxDurationSeconds)} segundos
 
-INSTRUCCIONES CLAVE:
-1. DURACIÓN MÁXIMA 15 SEGUNDOS: Escribí entre 2 y 3 oraciones dinámicas y cálidas (entre 26 y 40 palabras como máximo, para que hablada dure entre 10 y 15 segundos).
-2. CERO DATOS FALSOS: NO inventes en qué año salió, premios, fechas ni historias. Hablá desde la compañía de la radio, la atmósfera del estilo "${req.radioStyle}" y el placer de escuchar "${cleanTitle}"${cleanArtist ? ` junto a ${cleanArtist}` : ""}.
-3. FLUIDEZ HUMANA: Usá español rioplatense masculino natural, con comas y pausas suaves para que la voz suene expresiva y humana.
+${specificInstruction}
 
 Devolvé únicamente un objeto JSON válido con esta estructura exacta:
 {
   "type": "${req.interventionType}",
-  "text": "Locución de 2 a 3 oraciones (máximo 15 segundos) en español rioplatense, cálida y sin datos inventados...",
+  "text": "${isDatoCurioso ? "Dato curioso real, concreto y atrapante sobre la canción en 2 a 3 oraciones (máximo 15 segundos)..." : "Locución de 2 a 3 oraciones (máximo 15 segundos) en español rioplatense..."}",
   "tone": "energico | calido | nocturno | relajado",
   "estimatedDurationSeconds": 12
 }`;
@@ -283,7 +486,7 @@ Devolvé únicamente un objeto JSON válido con esta estructura exacta:
               { role: "user", content: userPrompt }
             ],
             response_format: { type: "json_object" },
-            temperature: 0.65,
+            temperature: isDatoCurioso ? 0.75 : 0.65,
             max_tokens: 4096
           }),
           signal: controller.signal
