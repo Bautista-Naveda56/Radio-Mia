@@ -1,7 +1,13 @@
 package com.example.ui
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
+import android.content.pm.ShortcutInfo
+import android.content.pm.ShortcutManager
+import android.graphics.drawable.Icon
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -25,6 +31,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddToHomeScreen
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.RecordVoiceOver
@@ -42,11 +49,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.MainActivity
+import com.example.R
 import com.example.ui.components.CollapsibleDebugPanel
 import com.example.ui.components.NowPlayingSection
 import com.example.ui.components.SongLibrarySection
@@ -61,10 +71,37 @@ import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.VuGreen
 
+private fun requestPinAppToHomeScreen(context: Context) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val shortcutManager = context.getSystemService(ShortcutManager::class.java)
+        if (shortcutManager != null && shortcutManager.isRequestPinShortcutSupported) {
+            val launchIntent = Intent(context, MainActivity::class.java).apply {
+                action = Intent.ACTION_MAIN
+                addCategory(Intent.CATEGORY_LAUNCHER)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val pinShortcutInfo = ShortcutInfo.Builder(context, "radio_mia_main_launcher")
+                .setShortLabel("Radio Mía")
+                .setLongLabel("Abrir Radio Mía")
+                .setIcon(Icon.createWithResource(context, R.mipmap.ic_launcher))
+                .setIntent(launchIntent)
+                .build()
+            shortcutManager.requestPinShortcut(pinShortcutInfo, null)
+            return
+        }
+    }
+    Toast.makeText(
+        context,
+        "Buscá 'Radio Mía' deslizando hacia arriba en tu cajón de aplicaciones.",
+        Toast.LENGTH_LONG
+    ).show()
+}
+
 @Composable
 fun RadioMiaApp(
     radioViewModel: RadioViewModel = viewModel()
 ) {
+    val context = LocalContext.current
     val uiState by radioViewModel.uiState.collectAsStateWithLifecycle()
     val engineState = uiState.engineState
 
@@ -102,7 +139,8 @@ fun RadioMiaApp(
                 visibleUserStatus = engineState.visibleUserStatus,
                 localSongsCount = uiState.localSongsCount,
                 demoSongsCount = uiState.demoSongsCount,
-                onQuickTestAnnouncer = { radioViewModel.triggerDjIntervention() }
+                onQuickTestAnnouncer = { radioViewModel.triggerDjIntervention() },
+                onPinToHomeScreen = { requestPinAppToHomeScreen(context) }
             )
         },
         bottomBar = {
@@ -273,7 +311,8 @@ private fun RadioStudioHeader(
     visibleUserStatus: String,
     localSongsCount: Int,
     demoSongsCount: Int,
-    onQuickTestAnnouncer: () -> Unit
+    onQuickTestAnnouncer: () -> Unit,
+    onPinToHomeScreen: () -> Unit = {}
 ) {
     val badgeBgColor by animateColorAsState(
         targetValue = if (isInterventionActive) OnAirCoral else StudioSurfaceElevated,
@@ -335,38 +374,62 @@ private fun RadioStudioHeader(
                     }
                 }
 
-                Spacer(modifier = Modifier.width(8.dp))
-
-                Surface(
-                    onClick = onQuickTestAnnouncer,
-                    shape = RoundedCornerShape(10.dp),
-                    color = if (isInterventionActive) OnAirCoralContainer else AmberPrimaryContainer,
-                    modifier = Modifier
-                        .border(
-                            1.dp,
-                            if (isInterventionActive) OnAirCoral else AmberPrimary,
-                            RoundedCornerShape(10.dp)
-                        )
-                        .testTag("header_quick_test_announcer")
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Surface(
+                        onClick = onPinToHomeScreen,
+                        shape = RoundedCornerShape(10.dp),
+                        color = StudioSurfaceElevated,
+                        modifier = Modifier
+                            .border(1.dp, AmberPrimary.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                            .testTag("header_pin_home_shortcut")
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.RecordVoiceOver,
-                            contentDescription = "Probar locutor",
-                            tint = if (isInterventionActive) OnAirCoral else AmberPrimary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (isInterventionActive) "Cancelar" else "Probar locutor",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (isInterventionActive) OnAirCoral else AmberPrimary,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.AddToHomeScreen,
+                                contentDescription = "Fijar ícono en Pantalla de Inicio",
+                                tint = AmberPrimary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
+                    Surface(
+                        onClick = onQuickTestAnnouncer,
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (isInterventionActive) OnAirCoralContainer else AmberPrimaryContainer,
+                        modifier = Modifier
+                            .border(
+                                1.dp,
+                                if (isInterventionActive) OnAirCoral else AmberPrimary,
+                                RoundedCornerShape(10.dp)
+                            )
+                            .testTag("header_quick_test_announcer")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.RecordVoiceOver,
+                                contentDescription = "Probar locutor",
+                                tint = if (isInterventionActive) OnAirCoral else AmberPrimary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isInterventionActive) "Cancelar" else "Probar locutor",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isInterventionActive) OnAirCoral else AmberPrimary,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                            )
+                        }
                     }
                 }
             }
