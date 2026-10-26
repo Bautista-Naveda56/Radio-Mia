@@ -74,8 +74,8 @@ sealed class BackendInterventionOutcome {
  */
 class RadioBackendClient(
     private val context: Context,
-    private val connectTimeoutMs: Int = 3500,
-    private val readTimeoutMs: Int = 7500
+    private val connectTimeoutMs: Int = 8000,
+    private val readTimeoutMs: Int = 15000
 ) {
     private val memoryCache = LinkedHashMap<String, BackendInterventionOutcome>(32, 0.75f, true)
 
@@ -93,7 +93,7 @@ class RadioBackendClient(
         song: SongItem,
         radioStyle: RadioStyle,
         interventionType: InterventionType,
-        promptVersion: String = "v1.2-rioplatense"
+        promptVersion: String = "v2.0-male-extended-verified"
     ): String {
         val raw = listOf(
             song.title.trim().lowercase(),
@@ -150,15 +150,39 @@ class RadioBackendClient(
             }
         }
 
+        val cleanTitle = song.title
+            .replace(Regex("\\.(mp3|wav|flac|m4a|ogg)$", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\b(official\\s*video|video\\s*oficial|lyrics|audio\\s*oficial|320kbps)\\b", RegexOption.IGNORE_CASE), "")
+            .trim()
+            .ifEmpty { song.title }
+
+        val cleanArtist = if (song.artist.equals("Artista Local", ignoreCase = true) ||
+            song.artist.equals("<unknown>", ignoreCase = true)
+        ) {
+            "No especificado"
+        } else {
+            song.artist.take(200)
+        }
+
+        val cleanAlbum = if (song.album.equals("Biblioteca del Teléfono", ignoreCase = true) ||
+            song.album.equals("Biblioteca Local", ignoreCase = true) ||
+            song.album.contains("Sesiones de Estudio", ignoreCase = true) ||
+            song.album.equals("Download", ignoreCase = true)
+        ) {
+            "No especificado"
+        } else {
+            song.album.take(200)
+        }
+
         val payloadJson = JSONObject().apply {
-            put("title", song.title.take(200))
-            put("artist", song.artist.take(200))
-            put("album", song.album.take(200))
+            put("title", cleanTitle.take(200))
+            put("artist", cleanArtist)
+            put("album", cleanAlbum)
             put("genre", song.genre.take(120))
             put("durationSeconds", (song.durationMs / 1000L).toInt().coerceAtLeast(1))
             put("radioStyle", radioStyle.displayName)
             put("interventionType", interventionType.apiValue)
-            put("maxDurationSeconds", maxDurationSeconds.coerceIn(5, 15))
+            put("maxDurationSeconds", maxDurationSeconds.coerceIn(8, 35))
         }
 
         val baseUrls = candidateBaseUrls(primaryBaseUrl)
@@ -278,6 +302,7 @@ class RadioBackendClient(
         val cleaned = primaryBaseUrl.trim().trimEnd('/')
         val defaults = listOf(
             cleaned,
+            "https://radio-mia.onrender.com",
             "http://10.0.2.2:3000",
             "http://127.0.0.1:3000",
             "http://localhost:3000"

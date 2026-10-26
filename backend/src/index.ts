@@ -70,7 +70,7 @@ export function createRadioMiaServer(
       return;
     }
 
-    if (method === "GET" && (url === "/health" || url === "/api/status")) {
+    if (method === "GET" && (url === "/" || url === "/health" || url === "/api/status")) {
       const selectedModel = customConfig.hasGroqApiKey
         ? await customService.selectBestTextModel().catch(() => customConfig.preferredTextModels[0])
         : "unconfigured";
@@ -78,6 +78,7 @@ export function createRadioMiaServer(
       sendJson(res, 200, {
         status: "ok",
         service: "Radio Mía Backend",
+        message: "Servidor activo y esperando solicitudes desde la app Android Radio Mía.",
         groqConfigured: customConfig.hasGroqApiKey,
         activeTextModel: selectedModel,
         preferredSpanishTtsModel: customConfig.preferredSpanishTtsModels[0],
@@ -184,10 +185,10 @@ export function createRadioMiaServer(
       try {
         const body = (await readJsonBody(req)) as Record<string, unknown>;
         const text = typeof body?.text === "string" ? body.text.trim() : "";
-        if (!text || text.length > 420) {
+        if (!text || text.length > 1200) {
           sendJson(res, 400, {
             error: "invalid_tts_input",
-            message: "El texto para TTS debe tener entre 1 y 420 caracteres.",
+            message: "El texto para TTS debe tener entre 1 y 1200 caracteres.",
             fallbackRequired: true
           });
           return;

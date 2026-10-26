@@ -100,6 +100,7 @@ fun NowPlayingSection(
     onSeekTo: (Long) -> Unit,
     onMasterVolumeChange: (Float) -> Unit,
     onDuckingVolumeChange: (Float) -> Unit,
+    onAnnouncerVoiceVolumeChange: (Float) -> Unit = {},
     onFadeDurationChange: (Float) -> Unit,
     onTriggerAnnouncer: () -> Unit,
     onTestAnnouncer: () -> Unit,
@@ -632,18 +633,24 @@ fun NowPlayingSection(
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 text = "GUION DEL LOCUTOR (${engineState.lastTextModelUsed})",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = AmberPrimary,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
                             )
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = if (engineState.lastCacheHit) "CACHÉ" else "EN VIVO",
                                 style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily),
-                                color = TelemetryCyan
+                                color = TelemetryCyan,
+                                maxLines = 1
                             )
                         }
                         Text(
@@ -757,8 +764,49 @@ fun NowPlayingSection(
 
                 HorizontalDivider(color = DividerSubtle)
 
-                // Sliders configurables de Ducking y Fade
+                // Sliders configurables: Volumen de voz del locutor, Volumen de música atenuada y Duración del fade
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Filled.RecordVoiceOver,
+                                contentDescription = null,
+                                tint = OnAirCoral,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Volumen de la voz del locutor",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextPrimary
+                            )
+                        }
+                        Text(
+                            text = "${(engineState.announcerVoiceVolume * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily),
+                            color = OnAirCoral,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Slider(
+                        value = engineState.announcerVoiceVolume,
+                        onValueChange = onAnnouncerVoiceVolumeChange,
+                        valueRange = 0.10f..1.0f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = OnAirCoral,
+                            activeTrackColor = OnAirCoral,
+                            inactiveTrackColor = DividerSubtle
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("slider_announcer_voice_volume")
+                    )
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -773,7 +821,7 @@ fun NowPlayingSection(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Volumen durante la intervención",
+                                text = "Volumen de música durante intervención",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = TextPrimary
                             )

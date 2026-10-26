@@ -186,6 +186,7 @@ fun RadioMiaApp(
                             onSeekTo = { radioViewModel.seekTo(it) },
                             onMasterVolumeChange = { radioViewModel.updateMasterVolume(it) },
                             onDuckingVolumeChange = { radioViewModel.updateDuckingVolume(it) },
+                            onAnnouncerVoiceVolumeChange = { radioViewModel.updateAnnouncerVoiceVolume(it) },
                             onFadeDurationChange = { radioViewModel.updateFadeDuration(it) },
                             onTriggerAnnouncer = { radioViewModel.triggerDjIntervention() },
                             onTestAnnouncer = { radioViewModel.triggerFallbackTestAnnouncer() },
@@ -228,6 +229,7 @@ fun RadioMiaApp(
                                 onSeekTo = { radioViewModel.seekTo(it) },
                                 onMasterVolumeChange = { radioViewModel.updateMasterVolume(it) },
                                 onDuckingVolumeChange = { radioViewModel.updateDuckingVolume(it) },
+                                onAnnouncerVoiceVolumeChange = { radioViewModel.updateAnnouncerVoiceVolume(it) },
                                 onFadeDurationChange = { radioViewModel.updateFadeDuration(it) },
                                 onTriggerAnnouncer = { radioViewModel.triggerDjIntervention() },
                                 onTestAnnouncer = { radioViewModel.triggerFallbackTestAnnouncer() },
@@ -287,18 +289,18 @@ private fun RadioStudioHeader(
         color = StudioSurface,
         tonalElevation = 4.dp
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // Cartel Luminoso "RADIO MÍA — AL AIRE" (sin frecuencias reales ni inventadas)
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                // Cartel Luminoso "RADIO MÍA — AL AIRE" (sin frecuencias reales ni inventadas)
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = badgeBgColor,
@@ -327,58 +329,67 @@ private fun RadioStudioHeader(
                             text = "RADIO MÍA — AL AIRE",
                             style = MaterialTheme.typography.labelLarge,
                             color = TextPrimary,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
-                Column(modifier = Modifier.weight(1f, fill = false)) {
-                    Text(
-                        text = visibleUserStatus,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (isInterventionActive) OnAirCoral else AmberPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "${localSongsCount + demoSongsCount} temas disponibles",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSecondary
-                    )
+                Surface(
+                    onClick = onQuickTestAnnouncer,
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isInterventionActive) OnAirCoralContainer else AmberPrimaryContainer,
+                    modifier = Modifier
+                        .border(
+                            1.dp,
+                            if (isInterventionActive) OnAirCoral else AmberPrimary,
+                            RoundedCornerShape(10.dp)
+                        )
+                        .testTag("header_quick_test_announcer")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.RecordVoiceOver,
+                            contentDescription = "Probar locutor",
+                            tint = if (isInterventionActive) OnAirCoral else AmberPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isInterventionActive) "Cancelar" else "Probar locutor",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isInterventionActive) OnAirCoral else AmberPrimary,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
 
-            Surface(
-                onClick = onQuickTestAnnouncer,
-                shape = RoundedCornerShape(10.dp),
-                color = if (isInterventionActive) OnAirCoralContainer else AmberPrimaryContainer,
-                modifier = Modifier
-                    .border(
-                        1.dp,
-                        if (isInterventionActive) OnAirCoral else AmberPrimary,
-                        RoundedCornerShape(10.dp)
-                    )
-                    .testTag("header_quick_test_announcer")
+            // Subtítulo compacto en una sola línea (evita que el texto se apile verticalmente en pantallas angostas)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.RecordVoiceOver,
-                        contentDescription = "Probar locutor",
-                        tint = if (isInterventionActive) OnAirCoral else AmberPrimary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = if (isInterventionActive) "Cancelar" else "Probar locutor",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (isInterventionActive) OnAirCoral else AmberPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                Text(
+                    text = "Estado: $visibleUserStatus",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isInterventionActive) OnAirCoral else AmberPrimary,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+                Text(
+                    text = "${localSongsCount + demoSongsCount} temas disponibles",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSecondary,
+                    maxLines = 1
+                )
             }
         }
     }

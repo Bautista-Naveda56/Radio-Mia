@@ -30,7 +30,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
     "qwen/qwen3.8-27b"
   ];
 
-  // Modelos TTS en español (nunca sustituir silenciosamente por una voz en inglés)
+  // Modelos TTS en Groq priorizando español
   const defaultSpanishTtsModels = [
     "canopylabs/orpheus-v1-spanish",
     "canopylabs/orpheus-spanish",
@@ -38,14 +38,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
     "playai-tts"
   ];
 
-  const defaultSpanishVoices = [
-    "diana",
-    "javier",
+  // Voces masculinas de locutor en Groq (Orpheus / PlayAI)
+  const defaultMaleVoices = [
     "mateo",
-    "valentina",
-    "sofia",
+    "javier",
     "carlos",
-    "lucia"
+    "diego",
+    "troy",
+    "daniel",
+    "austin"
   ];
 
   return {
@@ -59,11 +60,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
       ? [customTtsModel, ...defaultSpanishTtsModels.filter((m) => m !== customTtsModel)]
       : defaultSpanishTtsModels,
     preferredSpanishVoices: customTtsVoice
-      ? [customTtsVoice, ...defaultSpanishVoices.filter((v) => v !== customTtsVoice)]
-      : defaultSpanishVoices,
+      ? [customTtsVoice, ...defaultMaleVoices.filter((v) => v !== customTtsVoice)]
+      : defaultMaleVoices,
     sttModel: env.GROQ_STT_MODEL?.trim() || "whisper-large-v3-turbo",
-    requestTimeoutMs: Number(env.GROQ_TIMEOUT_MS || 9000),
-    promptVersion: "v1.2-rioplatense"
+    requestTimeoutMs: Number(env.GROQ_TIMEOUT_MS || 11000),
+    promptVersion: "v2.0-male-extended-verified"
   };
 }
 

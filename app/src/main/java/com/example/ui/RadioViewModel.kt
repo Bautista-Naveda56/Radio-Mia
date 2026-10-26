@@ -171,6 +171,10 @@ class RadioViewModel(application: Application) : AndroidViewModel(application) {
         audioEngine.setDuckingTargetVolume(volume)
     }
 
+    fun updateAnnouncerVoiceVolume(volume: Float) {
+        audioEngine.setAnnouncerVoiceVolume(volume)
+    }
+
     fun updateFadeDuration(seconds: Float) {
         audioEngine.setFadeDurationSeconds(seconds)
     }

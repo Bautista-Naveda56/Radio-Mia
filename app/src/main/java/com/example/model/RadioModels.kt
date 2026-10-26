@@ -63,27 +63,28 @@ data class RadioEngineState(
     val originalVolumeBeforeIntervention: Float = 0.85f,
     val currentRealtimeMusicVolume: Float = 0.85f,
     val duckingTargetVolume: Float = 0.18f,
+    val announcerVoiceVolume: Float = 1.0f,
     val fadeDurationSeconds: Float = 1.4f,
     val interventionPhase: DjInterventionPhase = DjInterventionPhase.IDLE,
     val announcerDurationMs: Long = 6500L,
     val announcerPositionMs: Long = 0L,
-    val announcerAudioLabel: String = "demo_locutor.wav",
+    val announcerAudioLabel: String = "Voz masculina IA / Respaldo",
     val statusBannerText: String = "Estudio listo — Seleccioná un tema o probá el locutor",
     // Controles de estilo e intervención con Groq
     val djEnabled: Boolean = true,
     val selectedRadioStyle: RadioStyle = RadioStyle.POP_ARGENTINA,
     val selectedInterventionType: InterventionType = InterventionType.PRESENTACION,
     val autoInterventionEverySongs: Int = 2,
-    val maxInterventionDurationSeconds: Int = 12,
-    val lastGeneratedScript: String = "Esto es Radio Mía. La música sigue y nosotros también.",
+    val maxInterventionDurationSeconds: Int = 22,
+    val lastGeneratedScript: String = "Buenas noches y bienvenidos a Radio Mía. Qué lindo encontrarnos de nuevo acá en el aire para compartir la música que te acompaña en cada momento. Subí el volumen que ya seguimos con más canciones elegidas por vos.",
     val lastScriptTone: String = "calido",
     val lastTextModelUsed: String = "openai/gpt-oss-120b",
-    val lastTtsStatus: String = "Respaldo local listo (demo_locutor.wav)",
+    val lastTtsStatus: String = "Voz masculina de locutor lista",
     val lastCacheHit: Boolean = false,
     val isUsingFallbackAudio: Boolean = false,
-    val backendUrl: String = "http://10.0.2.2:3000",
+    val backendUrl: String = "https://radio-mia.onrender.com",
     val backendConnected: Boolean = false,
-    val lastTechnicalDetail: String = "Backend configurado en http://10.0.2.2:3000"
+    val lastTechnicalDetail: String = "Backend configurado en https://radio-mia.onrender.com"
 ) {
     val isInterventionActive: Boolean
         get() = interventionPhase != DjInterventionPhase.IDLE
@@ -94,7 +95,7 @@ data class RadioEngineState(
             val djPart = when (interventionPhase) {
                 DjInterventionPhase.IDLE -> "Locutor: Inactivo"
                 DjInterventionPhase.GENERATING_SCRIPT -> "Locutor: Generando intervención (Groq)"
-                DjInterventionPhase.GENERATING_VOICE -> "Locutor: Generando voz (Groq TTS)"
+                DjInterventionPhase.GENERATING_VOICE -> "Locutor: Generando voz masculina"
                 DjInterventionPhase.FADING_DOWN -> "Locutor: Atenuando música"
                 DjInterventionPhase.SPEAKING -> "Locutor: Al aire ($announcerAudioLabel)"
                 DjInterventionPhase.FADING_UP -> "Locutor: Recuperando volumen"

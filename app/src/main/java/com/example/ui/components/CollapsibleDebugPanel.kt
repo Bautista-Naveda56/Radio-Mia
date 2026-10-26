@@ -184,7 +184,7 @@ fun CollapsibleDebugPanel(
 
                     DebugMetricRow(
                         label = "Volumen durante la intervención:",
-                        value = "${(engineState.duckingTargetVolume * 100).toInt()}% (Fade: ${String.format(Locale.US, "%.1f", engineState.fadeDurationSeconds)} s)",
+                        value = "Música: ${(engineState.duckingTargetVolume * 100).toInt()}% • Voz locutor: ${(engineState.announcerVoiceVolume * 100).toInt()}% (Fade: ${String.format(Locale.US, "%.1f", engineState.fadeDurationSeconds)} s)",
                         testTag = "debug_intervention_volume"
                     )
 

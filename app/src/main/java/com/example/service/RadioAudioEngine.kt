@@ -4,6 +4,10 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Bundle
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
+import android.speech.tts.Voice
 import androidx.core.content.ContextCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -22,6 +26,8 @@ import com.example.model.RadioEngineState
 import com.example.model.RadioStyle
 import com.example.model.SongItem
 import com.example.model.VisibleRadioStates
+import java.io.File
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.max
 import kotlinx.coroutines.CancellationException
@@ -37,13 +43,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Motor central de audio de Radio Mía.
  * Coordina dos instancias de ExoPlayer:
  *  1) musicPlayer: Reproductor principal de canciones locales / respaldo expuesto en MediaSessionService.
- *  2) voicePlayer: Reproductor dedicado para la voz del locutor (Groq TTS o demo_locutor.wav)
- *     que se superpone sin pausar jamás la música.
+ *  2) voicePlayer: Reproductor dedicado para la voz masculina del locutor (Groq TTS, síntesis WAV masculina
+ *     del guion Groq o demo_locutor.wav) con control de volumen propio e independiente.
  */
 class RadioAudioEngine private constructor(private val appContext: Context) {
 
@@ -61,6 +69,12 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
     private var voiceCompletionDeferred: CompletableDeferred<Unit>? = null
     private var mediaController: MediaController? = null
     private var songsPlayedSinceLastIntervention: Int = 0
+
+    @Volatile
+    private var androidTts: TextToSpeech? = null
+    private val ttsReadyDeferred = CompletableDeferred<Boolean>()
+    @Volatile
+    private var selectedMaleVoiceLabel: String = "Locutor Masculino ES"
 
     val musicPlayer: ExoPlayer by lazy {
         val audioAttributes = AudioAttributes.Builder()
@@ -80,7 +94,7 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
     }
 
     /**
-     * Segundo reproductor exclusivo para la voz del locutor (voz Groq o demo_locutor.wav).
+     * Segundo reproductor exclusivo para la voz del locutor.
      * Importante: handleAudioFocus = false para que Android NO pause ni silencie a musicPlayer.
      */
     val voicePlayer: ExoPlayer by lazy {
@@ -94,7 +108,7 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
             .build()
             .apply {
                 repeatMode = Player.REPEAT_MODE_OFF
-                volume = 1.0f
+                volume = _state.value.announcerVoiceVolume
                 addListener(voicePlayerListener)
             }
     }
@@ -141,8 +155,6 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
                     )
                 }
 
-                // Si el DJ automático está habilitado y no hay otra intervención activa,
-                // dispara una presentación al cumplir la frecuencia configurada.
                 if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && _state.value.djEnabled) {
                     songsPlayedSinceLastIntervention += 1
                     val freq = _state.value.autoInterventionEverySongs.coerceAtLeast(1)
@@ -167,13 +179,12 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
         }
 
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-            // Si el audio generado no se puede reproducir, liberar inmediatamente la espera
-            // para no dejar nunca la música atenuada.
             voiceCompletionDeferred?.complete(Unit)
         }
     }
 
     init {
+        initSpanishMaleTtsEngine()
         engineScope.launch {
             val (uri, sourceLabel) = repository.resolveAnnouncerAudioUri()
             fallbackAnnouncerUri = uri
@@ -184,6 +195,142 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
         }
         startTelemetryPolling()
         ensureServiceBound()
+    }
+
+    /**
+     * Inicializa el sintetizador en español configurando explícitamente una voz masculina
+     * y un registro grave de locutor de radio FM (pitch = 0.80f).
+     */
+    private fun initSpanishMaleTtsEngine() {
+        runCatching {
+            androidTts = TextToSpeech(appContext) { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    val tts = androidTts
+                    if (tts != null) {
+                        val locales = listOf(
+                            Locale("es", "AR"),
+                            Locale("es", "UY"),
+                            Locale("es", "419"),
+                            Locale("es", "US"),
+                            Locale("es", "ES"),
+                            Locale("es")
+                        )
+                        for (loc in locales) {
+                            val res = tts.setLanguage(loc)
+                            if (res != TextToSpeech.LANG_MISSING_DATA && res != TextToSpeech.LANG_NOT_SUPPORTED) {
+                                break
+                            }
+                        }
+
+                        // Buscar en las voces instaladas una voz masculina en español
+                        runCatching {
+                            val availableVoices = tts.voices?.filter { v ->
+                                v.locale.language.equals("es", ignoreCase = true)
+                            }.orEmpty()
+
+                            val selectedVoice = selectBestSpanishMaleVoice(availableVoices)
+                            if (selectedVoice != null) {
+                                tts.voice = selectedVoice
+                                selectedMaleVoiceLabel = "Voz Hombre (${selectedVoice.locale.country.ifEmpty { "ES" }})"
+                            }
+                        }
+
+                        // Registro grave masculino de cabina FM y cadencia natural de locutor
+                        tts.setPitch(0.80f)
+                        tts.setSpeechRate(0.98f)
+                        ttsReadyDeferred.complete(true)
+                    } else {
+                        ttsReadyDeferred.complete(false)
+                    }
+                } else {
+                    ttsReadyDeferred.complete(false)
+                }
+            }
+        }.onFailure {
+            ttsReadyDeferred.complete(false)
+        }
+    }
+
+    private fun selectBestSpanishMaleVoice(spanishVoices: List<Voice>): Voice? {
+        if (spanishVoices.isEmpty()) return null
+
+        val maleMarkers = listOf(
+            "male", "hombre", "masculin", "jorge", "carlos", "diego", "juan", "mateo",
+            "miguel", "pedro", "alberto", "raul", "-iom-", "-eef-", "-eed-", "-esd-", "-esc-"
+        )
+        val femaleMarkers = listOf(
+            "female", "mujer", "femenin", "paulina", "monica", "elena", "helena", "sabina",
+            "laura", "francisca", "-sfb-", "-sfc-", "-sfd-", "-esa-", "-esb-"
+        )
+
+        // 1. Priorizar voces explícitamente masculinas en español (preferentemente AR/419/US/ES local)
+        val explicitMale = spanishVoices.firstOrNull { v ->
+            val id = v.name.lowercase()
+            maleMarkers.any { id.contains(it) } && !v.isNetworkConnectionRequired
+        } ?: spanishVoices.firstOrNull { v ->
+            val id = v.name.lowercase()
+            maleMarkers.any { id.contains(it) }
+        }
+        if (explicitMale != null) return explicitMale
+
+        // 2. Si los nombres no incluyen marcador directo, elegir una voz que no tenga identificador femenino
+        val nonFemale = spanishVoices.firstOrNull { v ->
+            val id = v.name.lowercase()
+            femaleMarkers.none { id.contains(it) } && !v.isNetworkConnectionRequired
+        }
+        return nonFemale ?: spanishVoices.firstOrNull()
+    }
+
+    private suspend fun synthesizeGroqScriptToWavUri(scriptText: String, cacheKey: String): Uri? {
+        if (scriptText.isBlank()) return null
+
+        // Esperar hasta 3.5s si el motor TTS recién se está inicializando en el teléfono
+        val ready = withTimeoutOrNull(3500L) { ttsReadyDeferred.await() } ?: false
+        val tts = androidTts ?: return null
+        if (!ready) return null
+
+        val outDir = File(appContext.cacheDir, "groq_male_wav_v2").apply { mkdirs() }
+        val outFile = File(outDir, "locutor_m_${cacheKey.take(16)}.wav")
+        if (outFile.exists() && outFile.length() > 100L) {
+            return Uri.fromFile(outFile)
+        }
+
+        return withTimeoutOrNull(9500L) {
+            val done = CompletableDeferred<Boolean>()
+            val utteranceId = "utt_male_${System.currentTimeMillis()}"
+
+            tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(id: String?) {}
+                override fun onDone(id: String?) {
+                    if (id == utteranceId) done.complete(true)
+                }
+
+                @Deprecated("Deprecated in Java")
+                override fun onError(id: String?) {
+                    if (id == utteranceId) done.complete(false)
+                }
+
+                override fun onError(id: String?, errorCode: Int) {
+                    if (id == utteranceId) done.complete(false)
+                }
+            })
+
+            val callResult = withContext(Dispatchers.Main) {
+                tts.setPitch(0.80f)
+                tts.setSpeechRate(0.98f)
+                tts.synthesizeToFile(scriptText, Bundle(), outFile, utteranceId)
+            }
+            if (callResult != TextToSpeech.SUCCESS) {
+                return@withTimeoutOrNull null
+            }
+
+            val succeeded = done.await()
+            if (succeeded && outFile.exists() && outFile.length() > 100L) {
+                Uri.fromFile(outFile)
+            } else {
+                null
+            }
+        }
     }
 
     private fun prepareAnnouncerTrack(uri: Uri, mediaId: String = "announcer_voice") {
@@ -215,7 +362,7 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
     }
 
     fun setBackendUrl(newUrl: String) {
-        val cleaned = newUrl.trim().ifEmpty { "http://10.0.2.2:3000" }
+        val cleaned = newUrl.trim().ifEmpty { "https://radio-mia.onrender.com" }
         _state.update {
             it.copy(
                 backendUrl = cleaned,
@@ -261,10 +408,6 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
         _state.update { it.copy(autoInterventionEverySongs = clamped) }
     }
 
-    /**
-     * Inicia y enlaza RadioPlaybackService (MediaSessionService) para garantizar
-     * reproducción continua en segundo plano y con la pantalla bloqueada.
-     */
     fun ensureServiceBound() {
         if (mediaController != null) return
         runCatching {
@@ -402,11 +545,6 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
         _state.update { it.copy(currentPositionMs = target) }
     }
 
-    /**
-     * Ajusta el volumen maestro de la música.
-     * Si hay una intervención activa, actualiza el volumen maestro objetivo para que al finalizar
-     * el fade-up se respete el nuevo nivel elegido por el usuario.
-     */
     fun setMasterVolume(newVolume: Float) {
         val clamped = newVolume.coerceIn(0f, 1f)
         val phase = _state.value.interventionPhase
@@ -448,23 +586,20 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
         }
     }
 
+    /**
+     * Ajusta en tiempo real el volumen de la voz del locutor (tanto antes como durante la intervención).
+     */
+    fun setAnnouncerVoiceVolume(voiceVolume: Float) {
+        val clamped = voiceVolume.coerceIn(0.10f, 1.0f)
+        voicePlayer.volume = clamped
+        _state.update { it.copy(announcerVoiceVolume = clamped) }
+    }
+
     fun setFadeDurationSeconds(seconds: Float) {
         val clamped = seconds.coerceIn(0.3f, 3.5f)
         _state.update { it.copy(fadeDurationSeconds = clamped) }
     }
 
-    /**
-     * Acción principal para "Intervención del DJ" y "Probar locutor".
-     * - Si YA hay una intervención activa:
-     *     Cancela de inmediato la intervención, detiene el reproductor de voz y recupera el volumen.
-     * - Si NO hay una intervención activa:
-     *     1. Asegura que la canción esté sonando y continúe sin pausarse mientras se consulta a Groq.
-     *     2. Solicita al backend seguro de Radio Mía el guion y voz en español (con caché y timeout).
-     *     3. Si no hay red o Groq falla, usa demo_locutor.wav como respaldo.
-     *     4. Hace fade-down gradual de la canción.
-     *     5. Reproduce la voz en voicePlayer sobre la canción en curso.
-     *     6. Al terminar la voz, hace fade-up gradual hasta userMasterVolume.
-     */
     fun triggerOrToggleAnnouncer(useGroqBackend: Boolean = true) {
         ensureServiceBound()
 
@@ -506,7 +641,6 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
                 var usingFallback = true
 
                 if (useGroqBackend) {
-                    // Paso 2 y 3: Solicitar intervención al backend mientras la música sigue sonando al 100%
                     _state.update {
                         it.copy(
                             originalVolumeBeforeIntervention = it.userMasterVolume,
@@ -536,36 +670,59 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
                                     lastGeneratedScript = outcome.scriptText,
                                     lastScriptTone = outcome.tone,
                                     lastTextModelUsed = outcome.textModelUsed,
-                                    lastTtsStatus = "Voz en español: ${outcome.ttsVoiceUsed} (${outcome.ttsModelUsed})",
+                                    lastTtsStatus = "Voz masculina Groq: ${outcome.ttsVoiceUsed} (${outcome.ttsModelUsed})",
                                     lastCacheHit = outcome.cached,
                                     isUsingFallbackAudio = false,
                                     backendConnected = true,
                                     announcerAudioLabel = chosenAudioLabel,
-                                    lastTechnicalDetail = "Guion y voz generados con Groq (${outcome.textModelUsed} + ${outcome.ttsModelUsed})",
+                                    lastTechnicalDetail = "Guion y voz masculina generados con Groq (${outcome.textModelUsed} + ${outcome.ttsModelUsed})",
                                     statusBannerText = VisibleRadioStates.GENERATING_VOICE
                                 )
                             }
                         }
 
                         is BackendInterventionOutcome.SuccessScriptWithFallbackAudio -> {
-                            chosenVoiceUri = fallbackUri
-                            chosenAudioLabel = "demo_locutor.wav"
-                            usingFallback = true
                             _state.update {
                                 it.copy(
                                     interventionPhase = DjInterventionPhase.GENERATING_VOICE,
-                                    visibleUserStatus = VisibleRadioStates.USING_FALLBACK_AUDIO,
+                                    visibleUserStatus = VisibleRadioStates.GENERATING_VOICE,
                                     lastGeneratedScript = outcome.scriptText,
                                     lastScriptTone = outcome.tone,
                                     lastTextModelUsed = outcome.textModelUsed,
-                                    lastTtsStatus = outcome.ttsStatusMessage,
                                     lastCacheHit = outcome.cached,
-                                    isUsingFallbackAudio = true,
                                     backendConnected = true,
-                                    announcerAudioLabel = chosenAudioLabel,
-                                    lastTechnicalDetail = outcome.technicalReason,
-                                    statusBannerText = "${VisibleRadioStates.USING_FALLBACK_AUDIO} • Guion Groq listo"
+                                    statusBannerText = "${VisibleRadioStates.GENERATING_VOICE} masculina del guion Groq…"
                                 )
+                            }
+
+                            val synthesizedWavUri = synthesizeGroqScriptToWavUri(outcome.scriptText, outcome.cacheKey)
+                            if (synthesizedWavUri != null) {
+                                chosenVoiceUri = synthesizedWavUri
+                                chosenAudioLabel = "$selectedMaleVoiceLabel • ${outcome.textModelUsed}"
+                                usingFallback = false
+                                _state.update {
+                                    it.copy(
+                                        visibleUserStatus = VisibleRadioStates.GENERATING_VOICE,
+                                        lastTtsStatus = "$selectedMaleVoiceLabel (WAV)",
+                                        isUsingFallbackAudio = false,
+                                        announcerAudioLabel = chosenAudioLabel,
+                                        lastTechnicalDetail = "Guion extenso generado en Render con ${outcome.textModelUsed} y sintetizado con voz masculina."
+                                    )
+                                }
+                            } else {
+                                chosenVoiceUri = fallbackUri
+                                chosenAudioLabel = "demo_locutor.wav"
+                                usingFallback = true
+                                _state.update {
+                                    it.copy(
+                                        visibleUserStatus = VisibleRadioStates.USING_FALLBACK_AUDIO,
+                                        lastTtsStatus = outcome.ttsStatusMessage,
+                                        isUsingFallbackAudio = true,
+                                        announcerAudioLabel = chosenAudioLabel,
+                                        lastTechnicalDetail = outcome.technicalReason,
+                                        statusBannerText = "${VisibleRadioStates.USING_FALLBACK_AUDIO} • Guion Groq listo"
+                                    )
+                                }
                             }
                         }
 
@@ -615,7 +772,7 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
                     }
                 }
 
-                // Paso 5.1: Fading Down gradual de la música (sin pausarla jamás)
+                // Fading Down gradual de la música (sin pausarla jamás)
                 val startMasterVolume = _state.value.userMasterVolume
                 val targetDuckVolume = minOf(_state.value.duckingTargetVolume, startMasterVolume)
                 val fadeDownMs = (_state.value.fadeDurationSeconds * 1000L).toLong().coerceAtLeast(250L)
@@ -634,7 +791,7 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
                     durationMs = fadeDownMs
                 )
 
-                // Paso 5.2: Reproducir la voz del locutor en el segundo reproductor
+                // Reproducir la voz del locutor en el segundo reproductor con el volumen elegido por el usuario
                 val completion = CompletableDeferred<Unit>()
                 voiceCompletionDeferred = completion
 
@@ -643,7 +800,7 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
                     mediaId = if (usingFallback) "demo_locutor" else "groq_tts_voice"
                 )
                 voicePlayer.seekTo(0L)
-                voicePlayer.volume = 1.0f
+                voicePlayer.volume = _state.value.announcerVoiceVolume
                 voicePlayer.play()
 
                 _state.update {
@@ -659,10 +816,9 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
                     )
                 }
 
-                // Esperar el final de la voz del locutor
                 completion.await()
 
-                // Paso 5.3: Subir gradualmente el volumen al volumen maestro vigente
+                // Subir gradualmente el volumen al volumen maestro vigente
                 val fadeUpMs = (_state.value.fadeDurationSeconds * 1000L).toLong().coerceAtLeast(250L)
                 _state.update {
                     it.copy(
@@ -692,7 +848,6 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (unexpected: Exception) {
-                // Regla crítica Sección 12: Nunca dejar la música permanentemente atenuada por una excepción
                 val safeVol = _state.value.userMasterVolume
                 musicPlayer.volume = safeVol
                 _state.update {
@@ -709,10 +864,6 @@ class RadioAudioEngine private constructor(private val appContext: Context) {
         }
     }
 
-    /**
-     * Cancela limpiamente la intervención activa, detiene la voz de inmediato y recupera
-     * gradualmente el volumen de la música hacia userMasterVolume sin dejar corrutinas ni reproductores colgados.
-     */
     fun cancelActiveInterventionAndRestoreVolume() {
         interventionJob?.cancel()
         voiceCompletionDeferred?.cancel()
