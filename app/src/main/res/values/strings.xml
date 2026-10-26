@@ -1,0 +1,29 @@
+<resources>
+    <string name="app_name">Radio Mía</string>
+    <string name="header_on_air">RADIO MÍA — AL AIRE</string>
+    <string name="header_subtitle">Cabina Interactiva &amp; Música Local</string>
+    <string name="status_dj_live">LOCUTOR EN VIVO</string>
+    <string name="status_studio_ready">TRANSMISIÓN ACTIVA</string>
+    <string name="tab_player">Al Aire</string>
+    <string name="tab_library">Canciones</string>
+    <string name="permission_title">Acceso a tu música local</string>
+    <string name="permission_rationale">Para listar y reproducir las canciones guardadas en tu teléfono con MediaStore, concedé el permiso de audio. También podés probar todo ahora mismo con las pistas instrumentales de respaldo incluidas.</string>
+    <string name="permission_button_grant">Permitir acceso a canciones</string>
+    <string name="permission_granted_badge">MediaStore conectado</string>
+    <string name="permission_demo_mode_badge">Modo Demo + Local</string>
+    <string name="btn_dj_intervention">Intervención del DJ</string>
+    <string name="btn_test_announcer">Probar locutor</string>
+    <string name="btn_cancel_announcer">Cancelar locutor (Recuperar volumen)</string>
+    <string name="label_master_volume">Volumen maestro de música</string>
+    <string name="label_ducking_volume">Volumen durante la intervención</string>
+    <string name="label_fade_duration">Tiempo de transición (Fade)</string>
+    <string name="debug_panel_title">Panel de Depuración</string>
+    <string name="debug_current_song">Canción actual</string>
+    <string name="debug_original_volume">Volumen original</string>
+    <string name="debug_intervention_volume">Volumen durante la intervención</string>
+    <string name="debug_playback_state">Estado de reproducción</string>
+    <string name="debug_announcer_duration">Duración del audio del locutor</string>
+    <string name="search_songs_placeholder">Buscar por título, artista o álbum…</string>
+    <string name="refresh_library">Actualizar biblioteca</string>
+    <string name="empty_local_songs_hint">No se detectaron canciones en MediaStore. Estás escuchando las pistas instrumentales libres de derechos de Radio Mía.</string>
+</resources>

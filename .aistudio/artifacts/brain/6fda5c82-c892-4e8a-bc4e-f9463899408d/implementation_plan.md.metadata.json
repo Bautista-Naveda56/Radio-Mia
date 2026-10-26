@@ -1,0 +1,6 @@
+{
+  "summary":  "Plan de implementación actualizado con las 10 correcciones solicitadas: cabecera 'RADIO MÍA — AL AIRE' sin frecuencias, generación verificada de demo_locutor.wav y pistas instrumentales libres de derechos, MediaSessionService en segundo plano para música y locutor, respeto del nuevo volumen maestro tras el fade-up, cancelación limpia al re-presionar Probar locutor y panel de depuración plegable.",
+  "updatedAt":  "2026-10-24T02:02:20.611283762Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

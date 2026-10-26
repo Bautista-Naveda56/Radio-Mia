@@ -1,0 +1,6 @@
+{
+  "name": "Radio Mía",
+  "description": "Prototipo de radio FM argentina con reproducción de música local en segundo plano e intervención de locutor con atenuación gradual de volumen.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
