@@ -49,7 +49,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
   ];
 
   return {
-    port: Number(env.RADIO_MIA_BACKEND_PORT || 3000),
+    port: Number(env.RADIO_MIA_BACKEND_PORT || env.PORT || 3000),
     hasGroqApiKey: Boolean(env.GROQ_API_KEY && env.GROQ_API_KEY.trim().length > 0),
     getGroqApiKey: () => (env.GROQ_API_KEY || "").trim(),
     preferredTextModels: customTextModel

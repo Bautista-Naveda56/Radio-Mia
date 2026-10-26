@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: radio-mia-backend
+    runtime: node
+    rootDir: backend
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    healthCheckPath: /health
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false

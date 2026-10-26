@@ -264,9 +264,21 @@ export function createRadioMiaServer(
 
 if (require.main === module) {
   const server = createRadioMiaServer();
-  server.listen(config.port, "0.0.0.0", () => {
+  let activePort = config.port;
+
+  server.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE" && activePort !== 3000) {
+      activePort = 3000;
+      server.listen(activePort, "0.0.0.0");
+    } else {
+      console.error("[Radio Mía Backend] Error al iniciar servidor:", err.message);
+      process.exit(1);
+    }
+  });
+
+  server.listen(activePort, "0.0.0.0", () => {
     console.log(
-      `[Radio Mía Backend] Escuchando en http://0.0.0.0:${config.port} (GROQ_API_KEY presente: ${config.hasGroqApiKey ? "SÍ" : "NO"})`
+      `[Radio Mía Backend] Escuchando en http://0.0.0.0:${activePort} (GROQ_API_KEY presente: ${config.hasGroqApiKey ? "SÍ" : "NO"})`
     );
   });
 }
